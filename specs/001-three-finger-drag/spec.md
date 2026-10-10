@@ -28,8 +28,11 @@ The team must resolve timing details and compare observable behavior with macOS 
 
 ### Terms
 
-- **Ready:** The feature is enabled, its required access is available, and no drag is active.
-- **Active drag:** The utility holds the drag action, including during the grace period.
+- **Ready:** The feature is enabled, required access is available, and neither an active drag nor pending release exists.
+- **Active drag:** A gesture in dragging or grace that has not terminated. Failure terminates it even if button release remains pending.
+- **Terminated gesture:** A gesture that cannot produce further drag movement or resume. Its output cleanup may remain pending.
+- **Pending release:** An unresolved cleanup obligation for the terminated gesture's held button, separate from gesture state.
+- **Cleanup complete:** The button has been released, or the desktop confirms that its owning virtual device or session no longer exists.
 - **Grace period:** A bounded interval that keeps the drag held and pauses gesture-driven pointer movement.
 - **Ending tap:** A fresh one-finger tap that satisfies RF-7 during the grace period. Recognition occurs on finger lift.
 - **Tap candidate:** A fresh single valid contact after all valid contacts have lifted during the drag's grace period.
@@ -191,18 +194,36 @@ The application determines the result of the release. A release does not guarant
 
 ### RF-8: Preserve ordinary gestures
 
-- WHILE no drag is active, the utility SHALL preserve ordinary one-finger pointing and two-finger scrolling.
+- WHILE no drag or release is pending, the utility SHALL preserve ordinary pointing and scrolling when touchpad access is available.
+- WHILE release remains pending, the utility SHALL suppress input from the affected touchpad.
+- WHEN suppressing input during cleanup, the utility SHALL discard it without later replay.
+- WHILE suppressing the affected touchpad, the utility SHALL leave other devices outside that restriction.
+- WHEN cleanup completes and touchpad access is available, the utility SHALL restore ordinary one-finger pointing and two-finger scrolling.
+- WHEN ordinary input returns after cleanup, the utility SHALL restore it independently of three-finger drag availability.
 - WHILE the feature is enabled, the utility SHALL reserve three-finger gestures for this feature.
 - WHILE the feature is enabled, the utility SHALL prevent its three-finger gestures from also triggering competing desktop actions.
 
 ### RF-9: End a drag after failure
 
-- IF a drag failure occurs, THEN the utility SHALL end any active drag.
+- IF a drag failure occurs, THEN the utility SHALL immediately terminate any active gesture and stop its drag movement.
+- WHEN a failure terminates a gesture, the utility SHALL cancel its timers and discard its queued movement.
+- WHEN a gesture terminates through failure, the utility SHALL prevent that gesture from resuming.
 - IF a drag failure permits release, THEN the utility SHALL release the held drag action immediately.
-- IF a drag failure prevents release, THEN the utility SHALL release the held drag action at the earliest opportunity.
+- IF a drag failure prevents release, THEN the utility SHALL track a separate pending-release obligation.
+- WHEN release becomes possible in the owning session, the utility SHALL release the held button at the earliest opportunity.
+- WHEN the button is released, the utility SHALL mark cleanup complete.
+- WHEN the desktop confirms the owning virtual device or session no longer exists, the utility SHALL mark cleanup complete.
+- IF device or session loss lacks confirmation, THEN the utility SHALL retain the pending-release obligation.
+- WHEN a new session appears, the utility SHALL prevent delivery of an old session's pending release into it.
+- WHEN a drag failure occurs, the utility SHALL report an English error identifying the failed operation, cause, and pending-release status.
+- WHERE recovery guidance is available, the utility SHALL include it in the failure error.
+- WHEN cleanup attempts repeat without a changed failure, the utility SHALL suppress repeated copies of the same error.
 
 Ending a failed drag does not undo actions that an application already completed.
-Failure recovery remains an open question. Recovery must not resume the interrupted drag.
+Failure termination and output cleanup are separate outcomes. Unconfirmed loss is not proof that a held button no longer exists.
+Pending cleanup keeps the affected touchpad suppressed even though the gesture has terminated.
+After cleanup, restore ordinary input as soon as touchpad access permits it.
+T06 defines availability of new three-finger drags. It cannot permit resumption of the terminated gesture.
 
 ## Non-functional requirements
 
@@ -257,7 +278,14 @@ Failure recovery remains an open question. Recovery must not resume the interrup
 | Candidate lift coincides exactly with grace expiry | Expiry wins. Release once without recognizing an ending tap. |
 | The pointer starts over an area without drag support | The application's ordinary behavior applies. |
 | A file drops over an invalid destination | The application determines the result. |
-| A failure prevents immediate release | The active drag ends. The utility releases the held drag action at the earliest opportunity. |
+| A failure prevents immediate release | Terminate the gesture and retain a separate pending release. Suppress input from the affected touchpad. |
+| Touchpad input arrives during pending cleanup | Discard it without replay. Leave other devices outside the restriction. |
+| The owning device or session disappears without confirmation | Keep cleanup pending. Do not assume release succeeded. |
+| The desktop confirms that the owning virtual device or session no longer exists | Complete cleanup without sending an old release into a new session. |
+| A new session appears while old cleanup remains pending | Do not send the old release into it. Keep the cleanup obligation until completion criteria hold. |
+| Cleanup completes while touchpad access remains unavailable | Restore ordinary input when access becomes available. |
+| Cleanup completes while three-finger dragging remains unavailable | Restore ordinary pointing and scrolling when access permits. |
+| Repeated cleanup attempts encounter the same failure | Do not repeatedly emit the same error. |
 | Movement coincides with grace-period expiry | Expiry wins. Release once without continuing the drag. |
 | A physical button or another pointing device acts during a drag | Interaction rules remain open. |
 
@@ -277,8 +305,9 @@ Failure recovery remains an open question. Recovery must not resume the interrup
 - Every functional acceptance criterion passes on both supported distributions.
 - Agreed representative applications support file dragging, text selection, and title-bar window movement in acceptance checks.
 - Tests cover drag start, finger-count changes, continuation, tap-to-end, and grace-period expiry.
-- Failure checks confirm drag termination and release wherever the environment permits release.
-- Ordinary pointing and scrolling work outside an active drag.
+- Failure checks confirm immediate gesture termination and separate cleanup through release or confirmed owner disappearance.
+- Cleanup checks verify touchpad suppression, discarded input, session-bound releases, and error reporting without repeated identical errors.
+- Ordinary pointing and scrolling work outside active drags and pending cleanup when touchpad access is available.
 - Acceptance checks show no competing three-finger desktop actions.
 - Response-time measurements meet the agreed limits.
 - Privacy and configuration checks satisfy NFR-5 and NFR-6.
@@ -293,6 +322,7 @@ Failure recovery remains an open question. Recovery must not resume the interrup
 - **OQ-3 (T01):** Use group displacement with a configurable 1 mm default. RF-2 defines contact validity, staggered placement, and baseline resets.
 - **OQ-4 (T03):** Preserve each grace deadline until continuation or termination. Require qualifying movement before expiry. Expiry wins exact-time ties.
 - **T04:** Match ordinary pointing and the logical primary button. Discard threshold-crossing movement and reset motion baselines after contact replacement.
+- **T05:** Separate failed-gesture termination from pending release. Suppress the affected touchpad until cleanup completes, then restore ordinary input independently.
 
 ## [OPEN QUESTIONS]
 

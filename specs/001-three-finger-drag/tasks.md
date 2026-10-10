@@ -34,7 +34,7 @@ These tasks capture user decisions. They do not select new behavior without appr
 | T02 | Define the ending tap. | RF-7 | 20 min | T01 | Made when: Approved criteria specify finger count, duration, movement tolerance, recognition time, and tap consumption. Evidence: [T02 decisions](#t02-completion-evidence). | done |
 | T03 | Define grace timing and event precedence. | RF-5, RF-6, RF-7 | 25 min | T02 | Made when: Approved criteria cover duration, timer restarts, stationary returns, repeated changes, and events exactly at expiry. Evidence: [T03 decisions](#t03-completion-evidence). | done |
 | T04 | Define motion and primary-button behavior. | RF-2, RF-3, RF-4, RF-6 | 25 min | T01 | Made when: Approved criteria define initial movement, direction, scaling, acceleration, repositioning, and left-handed button behavior. Evidence: [T04 decisions](#t04-completion-evidence). | done |
-| T05 | Define failed-drag termination and pending release. | RF-8, RF-9 | 25 min | T03 | Made when: Approved terms distinguish terminated gestures from pending releases and define ordinary-input routing during cleanup. | - |
+| T05 | Define failed-drag termination and pending release. | RF-8, RF-9 | 25 min | T03 | Made when: Approved terms distinguish terminated gestures from pending releases and define ordinary-input routing during cleanup. Evidence: [T05 decisions](#t05-completion-evidence). | done |
 | T06 | Define enablement, recovery, and rearming. | RF-2, RF-7, RF-8, RF-9 | 25 min | T05 | Made when: Approved criteria cover startup, disablement, recovery, fresh contacts, and contacts remaining after expiry. | - |
 | T07 | Define physical-button and other-device interactions. | RF-3, RF-7, RF-8, RF-9 | 25 min | T04, T06 | Made when: Approved criteria cover physical buttons, other pointers, multiple touchpads, duplicate instances, and explicit cancellation. | - |
 | T08 | Define lifecycle and desktop interruption behavior. | RF-4, RF-8, RF-9 | 25 min | T05, T06 | Made when: Approved criteria cover exit, crash, lock, suspend, session loss, monitor changes, and target-window disappearance. | - |
@@ -113,6 +113,24 @@ The user approved these decisions in the T04 clarification discussion:
 Evidence: [RF-2](spec.md#rf-2-start-a-drag), [RF-3](spec.md#rf-3-move-during-a-drag), [RF-4](spec.md#rf-4-drag-files-select-text-and-move-windows), and [RF-6](spec.md#rf-6-continue-a-drag).
 The [plan decisions](plan.md#approved-t04-decisions) and [T04 acceptance scenarios](plan.md#t04-acceptance-scenarios) define future verification.
 T04 completes specification decisions, not implementation testing. T10 retains numerical tolerances and response-time limits.
+
+### T05 completion evidence
+
+The user approved these decisions in the T05 clarification discussion:
+
+- Failure immediately terminates the gesture, stops its movement, cancels its timers, and prevents resumption.
+- Track a pending button release separately from the terminated gesture.
+- Suppress input from the affected touchpad until cleanup completes. Discard suppressed input without later replay.
+- Leave other devices outside this restriction.
+- Complete cleanup after button release or desktop confirmation that the owning virtual device or session no longer exists.
+- Do not infer cleanup success from unconfirmed loss. Never deliver an old release into a new session.
+- After cleanup, restore ordinary input when touchpad access is available, independently of three-finger drag availability.
+- Report the operation, cause, pending-release status, and available recovery guidance in English.
+- Repeated cleanup attempts must not continuously repeat the same error.
+
+Evidence: [terms](spec.md#terms), [RF-8](spec.md#rf-8-preserve-ordinary-gestures), [RF-9](spec.md#rf-9-end-a-drag-after-failure), and [plan decisions](plan.md#approved-t05-decisions).
+The [T05 acceptance scenarios](plan.md#t05-acceptance-scenarios) define future verification. T05 completes specification decisions, not implementation testing.
+T06 retains new-drag enablement and recovery decisions.
 
 ## 2. Establish backend feasibility
 

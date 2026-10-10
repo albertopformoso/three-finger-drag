@@ -15,20 +15,17 @@ The input backend remains provisional until its feasibility checks pass.
 
 | Decision | Required clarification | Coverage |
 | --- | --- | --- |
-| Timing | Define grace duration, restart rules, stationary contacts, and events at expiry. | RF-5, RF-6, RF-7, OQ-1, OQ-4 |
 | Pointer behavior | Define motion scaling, acceleration, direction, and measurable response limits. | RF-3, RF-6, OQ-9 |
 | Drag action | Confirm the logical primary-button action, including left-handed settings. | RF-2, RF-4, RF-7 |
 | Failure state | Distinguish a terminated gesture from a button release that remains pending. | RF-8, RF-9 |
 | Recovery | Define recovery, fresh-contact requirements, enablement, and disablement. | RF-2, RF-8, RF-9, OQ-5, OQ-6 |
 | External actions | Define physical buttons, other pointing devices, cancellation, and lifecycle interruptions. | RF-3, RF-7, RF-8, RF-9, OQ-7 |
 | Compatibility | Select touchpads, Hyprland versions, applications, window states, and the macOS reference. | RF-1, RF-4, OQ-8 |
-| Configuration | Define remaining settings and invalid-configuration behavior. T01 and T02 approve drag-start and ending-tap settings. | RF-1, RF-2, RF-5, RF-7, RF-9 |
+| Configuration | Define remaining settings and invalid-configuration behavior. T01 through T03 approve drag-start, ending-tap, and grace settings. | RF-1, RF-2, RF-5, RF-7, RF-9 |
 
-RF-5 currently prescribes a timer start during situations where OQ-4 leaves timer restarts open.
-RF-3 and RF-7 also require an explicit precedence rule at grace-period expiry.
 RF-9 cannot define failure completion solely through the existing held-button definition of an active drag.
 
-The specification must also address stationary active drags, repeated interruptions, contact noise, and contacts remaining after expiry.
+The specification must also address stationary drags outside grace, contact noise, and contacts remaining after expiry.
 It must define outcomes for process exit, session lock, suspend, device changes, and target-window disappearance.
 
 The completion criteria must preserve the constitution's macOS-equivalence requirement.
@@ -52,7 +49,7 @@ Coverage: RF-2 and RF-3. Specification reference: RF-2 and resolved OQ-3.
 
 The default still requires macOS comparison. T04 defines pointer scaling and initial output movement.
 T11 defines invalid-configuration recovery and configuration changes during a drag.
-The start threshold does not define grace-period continuation behavior.
+T03 uses the same displacement threshold for grace-period continuation.
 
 ### Approved T02 decisions
 
@@ -70,9 +67,27 @@ Coverage: RF-7. Specification reference: ending-tap recognition and resolved OQ-
 - Require touchdown and lift before grace expiry. Touchdown does not extend the grace deadline.
 - Consume a recognized ending tap and release the held drag without an additional click.
 
-T03 defines precedence for lift exactly at grace expiry. Candidate cancellation alone does not release the drag.
+Expiry takes priority over lift exactly at the grace deadline. Candidate cancellation alone does not release the drag.
 T11 defines invalid-configuration recovery and configuration changes during a drag.
 Both defaults require comparison with macOS.
+
+### Approved T03 decisions
+
+Coverage: RF-5, RF-6, and RF-7. Specification references: resolved OQ-1 and OQ-4.
+
+- Default to a configurable grace duration of 300 ms. Accept only finite numeric durations greater than zero.
+- Start the timer on the first departure from three valid contacts during dragging outside grace.
+- Preserve the deadline through all further contact changes, including complete lifting and stationary three-contact returns.
+- Establish a fresh continuation baseline when exactly three valid contacts return.
+- Reset that baseline when valid contact count or identities change. Preserve the deadline.
+- Use group displacement and the configured drag-start threshold for continuation.
+- Resume only when that threshold is reached strictly before the deadline.
+- Cancel the timer after successful continuation. A later interruption starts a new grace period.
+- At the exact deadline, expiry takes priority over qualifying movement and candidate lift. Release once.
+
+T04 defines output movement at continuation. T06 defines rearming after expiry.
+T11 defines configuration changes during a drag and invalid-configuration recovery.
+The 300 ms default requires comparison with macOS.
 
 ## 2. Module structure
 
@@ -161,8 +176,8 @@ Coverage: RF-1 through RF-9. Constitution principles 3 and 5.
 | Record | Main fields | Rules and coverage |
 | --- | --- | --- |
 | Contact frame | Device ID, sequence, monotonic timestamp, contact IDs, positions, classification | Complete frames only. RF-2, RF-3, RF-5, RF-7. |
-| Gesture policy | Start threshold, tap duration limit, tap displacement limit, grace duration, timer precedence, motion mapping | T01 and T02 approve start and tap rules. Remaining rules require approval. RF-2 through RF-7. |
-| Gesture state | Phase, valid contact identities, start baseline, motion baseline, grace deadline, timer generation | Separate fixed start and movement baselines. No disk serialization. RF-2 through RF-7. |
+| Gesture policy | Shared start/continuation threshold, tap limits, grace duration, expiry precedence, motion mapping | T01 through T03 approve recognition and grace rules. Motion mapping remains open. RF-2 through RF-7. |
+| Gesture state | Phase, valid contact identities, start baseline, continuation baseline, motion baseline, grace deadline, timer generation | Keep recognition baselines fixed for each contact group. No disk serialization. RF-2 through RF-7. |
 | Tap candidate | Contact identity, initial position, touchdown time, maximum displacement, cancellation state, all-contacts-lifted eligibility | Keep in memory. Reset after the required zero-contact state. RF-7. |
 | Output state | Desired button state, submitted button state, release pending, output-session identity | Keep failed release separate from gesture completion. RF-2, RF-7, RF-9. |
 | Effect | Hold button, move pointer, release button, schedule timer, cancel timer, route input | Abstract commands without native handles. RF-2 through RF-9. |
@@ -221,13 +236,16 @@ Do not create a configuration file merely because the utility starts.
 
 Reject unknown fields and unsupported schema versions with English errors.
 The specification must define whether invalid configuration stops startup or selects an approved fallback.
-Grace-period timing settings remain pending OQ-1. This plan assigns no default grace duration.
+Use `grace_period_ms` for the grace duration, with a default of 300 ms when absent.
+Accept only finite JSON numbers greater than zero. Reject zero, negative, nonnumeric, and nonfinite values.
+Do not write the implicit default to disk.
 
 Use `drag_start_threshold_mm` for the approved drag-start setting.
 If the setting is absent, use 1 mm without writing an implicit default to disk.
 Accept only a finite JSON number greater than zero. Reject strings, booleans, null, zero, negative values, and nonfinite values.
 Do not convert numeric strings into numbers.
 Pass the validated threshold to gesture logic as a policy value, without exposing configuration access to that package.
+Use this same threshold for continuation. Do not introduce a separate continuation setting.
 
 Use `ending_tap_max_duration_ms` for the ending-tap duration limit, with a default of 200 ms.
 Use `ending_tap_max_displacement_mm` for the ending-tap displacement limit, with a default of 1 mm.
@@ -274,7 +292,7 @@ Coverage: RF-2 through RF-9.
 1. Receive a complete contact frame, timer event, output result, or availability change.
 2. Map its time into the runtime's monotonic clock domain.
 3. Ignore stale timer generations and obsolete session events.
-4. Apply the specification's approved precedence rules.
+4. Order gesture events and deadlines by monotonic time. Process grace expiry before movement or tap lift at the same timestamp.
 5. Pass domain values to the gesture logic.
 6. Apply returned effects in order.
 7. Record output submission results without assuming application receipt.
@@ -304,10 +322,10 @@ Coverage: RF-3, RF-4, RF-5.
 
 1. While exactly three valid contacts remain, calculate their group movement from the motion baseline.
 2. Submit relative motion without another button press.
-3. If the contact count changes from three, stop gesture-driven pointer movement.
-4. Enter the grace phase and schedule its approved deadline.
+3. Outside grace, if the contact count departs from three, stop gesture-driven pointer movement.
+4. Enter grace with a new timer generation. Set the deadline to interruption time plus the configured grace duration.
 5. Keep the drag action held during the grace phase.
-6. Apply approved stationary-contact and repeated-contact-change rules.
+6. Preserve the deadline through later contact changes and stationary contacts. Do not restart or extend it.
 
 File managers, text widgets, and draggable title bars receive the same ordinary drag action.
 The utility does not move files directly, edit selections, or command arbitrary window movement.
@@ -316,11 +334,17 @@ The utility does not move files directly, edit selections, or command arbitrary 
 
 Coverage: RF-5, RF-6.
 
-1. Track fresh contact baselines without moving the pointer.
-2. If exactly three contacts satisfy the continuation rule before expiry, cancel the current timer generation.
-3. Enter the dragging phase without releasing or pressing the button again.
-4. Calculate future movement from the new baseline.
-5. Exclude absolute contact displacement caused by finger repositioning.
+1. Process grace expiry before movement at or after its deadline.
+2. Before expiry, discard the continuation baseline if valid contact count or identities change.
+3. If exactly three valid contacts remain without a baseline, store their identities and average position in millimeters.
+4. On subsequent frames, measure straight-line displacement from that fixed baseline. Do not accumulate traveled distance.
+5. Below the shared drag-start threshold, preserve the pause and deadline.
+6. At or above the threshold strictly before expiry, cancel the current timer generation.
+7. Enter dragging without releasing or pressing the button again.
+8. Establish the motion baseline and apply T04's approved continuation-motion rule.
+9. Exclude absolute contact displacement caused by repositioning.
+
+A later departure from three contacts creates a new grace deadline under the move-and-pause procedure.
 
 ### Recognize an ending tap
 
@@ -335,11 +359,11 @@ Coverage: RF-7.
 7. Cancel the candidate if displacement or elapsed duration exceeds its configured limit.
 8. Cancel the candidate if a second valid contact appears.
 9. After cancellation, wait for zero valid contacts before accepting a fresh candidate.
-10. If grace expiry precedes candidate lift, discard the candidate and end the drag through expiry.
+10. If grace expiry precedes or coincides with candidate lift, discard the candidate and end the drag through expiry.
 11. If the candidate lifts before grace expiry, check duration and maximum displacement against their inclusive limits.
 12. If both limits pass, emit one ending-tap result for consumption and drag release.
 
-Apply T03's future precedence rule when candidate lift and grace expiry share a timestamp.
+Expiry takes priority when candidate lift and grace expiry share a timestamp. Submit only one drag release.
 Candidate cancellation alone generates no drag-release effect.
 Clear candidate state when the grace period ends through continuation, expiry, recognized tap, or failure.
 
@@ -480,7 +504,7 @@ Unless stated otherwise, use default limits and a grace deadline later than the 
 | All valid contacts lift after cancellation, then one touches down before grace expiry | Allow a fresh candidate under the same limits. |
 | A detected palm appears beside a candidate | Keep the candidate valid if its other conditions still hold. |
 | Grace expiry occurs before candidate lift | End through expiry. The later lift cannot end the same drag again. |
-| Candidate lift coincides exactly with grace expiry | Expected precedence remains pending T03. |
+| Candidate lift coincides exactly with grace expiry | Expiry wins. Release once without recognizing an ending tap. |
 | Duration is configured to 300 ms and displacement to 2 mm | Accept 300 ms and 2 mm. Reject values exceeding either configured limit. |
 | Only one ending-tap setting is present | Use that value and the independent default for the other setting. |
 | The drag-start threshold changes | Ending-tap limits remain unchanged. |
@@ -488,6 +512,36 @@ Unless stated otherwise, use default limits and a grace deadline later than the 
 
 Use synthetic coordinates and injected monotonic time for boundary checks.
 Verify that canceled candidates cannot emit ending-tap results when their original contact later lifts.
+
+### T03 acceptance scenarios
+
+Coverage: RF-5, RF-6, and RF-7. These scenarios define future deterministic tests.
+Use a 300 ms grace duration and a 1 mm shared movement threshold unless stated otherwise.
+Times below are relative to the first interruption.
+
+| Scenario | Expected result |
+| --- | --- |
+| No grace setting is present | Use 300 ms without writing configuration. |
+| Grace duration is configured to 500 ms | Set the deadline 500 ms after the interruption. |
+| Grace duration is zero, negative, nonnumeric, or nonfinite | Reject the value. Configuration recovery remains pending T11. |
+| Dragging changes from three contacts to zero, one, two, or four | Pause movement and set one deadline at 300 ms. |
+| Two remaining contacts lift at 100 ms | Preserve the original 300 ms deadline. |
+| Contacts repeatedly change during grace | Reset affected continuation baselines without extending the deadline. |
+| Three contacts return at 100 ms and remain stationary | Remain paused and release at 300 ms. |
+| Three contacts return at a different touchpad position | Establish a fresh baseline without moving the pointer. |
+| Group displacement reaches 0.99 mm at 299 ms | Remain paused. Release at 300 ms unless another qualifying event occurs earlier. |
+| Group displacement reaches 1 mm at 299 ms | Continue the same drag and cancel the timer. |
+| Group displacement reaches 1 mm at 300 ms or later | Expiry wins. Release once without continuing the expired drag. |
+| A valid ending tap lifts at 299 ms | End through the tap and cancel the timer. Generate no additional click. |
+| A valid candidate lifts at exactly 300 ms | End through expiry once, without recognizing an ending tap. |
+| Three contacts return, move 0.6 mm, then one contact changes identity | Discard displacement. Establish a fresh baseline while preserving the deadline. |
+| Displacement repeatedly returns to zero without reaching 1 mm | Do not continue, regardless of total traveled distance. |
+| The shared threshold is configured to 2 mm | Require 2 mm for both drag start and continuation. |
+| Continuation succeeds at 200 ms, then another interruption occurs at 250 ms | Set the new deadline to 550 ms. |
+| The canceled first timer fires at 300 ms after that continuation | Ignore its stale generation. Preserve the new deadline. |
+
+Also test a detected palm beside the returning group. It must change neither baseline nor deadline.
+Use injected monotonic time to verify exact-deadline precedence independently of callback ordering.
 
 ### Adapter integration tests
 

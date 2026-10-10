@@ -32,7 +32,7 @@ These tasks capture user decisions. They do not select new behavior without appr
 | --- | --- | --- | --- | --- | --- | --- |
 | T01 | Define contact recognition and drag-start thresholds. | RF-2, RF-3 | 25 min | None | Made when: Approved criteria cover contact validity, staggered placement, stationary fingers, and required finger movement. Evidence: [T01 decisions](#t01-completion-evidence). | done |
 | T02 | Define the ending tap. | RF-7 | 20 min | T01 | Made when: Approved criteria specify finger count, duration, movement tolerance, recognition time, and tap consumption. Evidence: [T02 decisions](#t02-completion-evidence). | done |
-| T03 | Define grace timing and event precedence. | RF-5, RF-6, RF-7 | 25 min | T02 | Made when: Approved criteria cover duration, timer restarts, stationary returns, repeated changes, and events exactly at expiry. | - |
+| T03 | Define grace timing and event precedence. | RF-5, RF-6, RF-7 | 25 min | T02 | Made when: Approved criteria cover duration, timer restarts, stationary returns, repeated changes, and events exactly at expiry. Evidence: [T03 decisions](#t03-completion-evidence). | done |
 | T04 | Define motion and primary-button behavior. | RF-2, RF-3, RF-4, RF-6 | 25 min | T01 | Made when: Approved criteria define initial movement, direction, scaling, acceleration, repositioning, and left-handed button behavior. | - |
 | T05 | Define failed-drag termination and pending release. | RF-8, RF-9 | 25 min | T03 | Made when: Approved terms distinguish terminated gestures from pending releases and define ordinary-input routing during cleanup. | - |
 | T06 | Define enablement, recovery, and rearming. | RF-2, RF-7, RF-8, RF-9 | 25 min | T05 | Made when: Approved criteria cover startup, disablement, recovery, fresh contacts, and contacts remaining after expiry. | - |
@@ -75,7 +75,26 @@ The user approved these decisions in the T02 clarification discussion:
 
 Evidence: [RF-7 recognition](spec.md#ending-tap-recognition), [resolved OQ-2](spec.md#resolved-decisions), and [plan decisions](plan.md#approved-t02-decisions).
 The [T02 acceptance scenarios](plan.md#t02-acceptance-scenarios) define future verification. T02 completes specification decisions, not implementation testing.
-T03 retains the decision about finger lift exactly at grace expiry.
+T03 resolves finger lift exactly at grace expiry: expiry takes priority.
+
+### T03 completion evidence
+
+The user approved these decisions in the T03 clarification discussion:
+
+- Default to a 300 ms grace period, configurable through the configuration file.
+- Accept only finite numeric durations greater than zero.
+- Start the deadline on the first departure from three valid contacts during dragging outside grace.
+- Further contact changes, including complete lifting, do not restart or extend the deadline.
+- Stationary three-contact returns preserve the pause and timer.
+- Establish a fresh continuation baseline when exactly three valid contacts return.
+- Contact count or identity changes reset the continuation baseline without changing the deadline.
+- Continue at the shared drag-start displacement threshold, strictly before expiry.
+- Successful continuation cancels the timer. A later interruption starts a new grace period.
+- Expiry wins exact-time ties with movement or ending-tap lift. Release once.
+
+Evidence: [RF-5 and RF-6](spec.md#rf-5-pause-a-drag), [RF-7](spec.md#rf-7-end-a-drag), and [plan decisions](plan.md#approved-t03-decisions).
+[Resolved OQ-1 and OQ-4](spec.md#resolved-decisions) capture duration and precedence decisions.
+The [T03 acceptance scenarios](plan.md#t03-acceptance-scenarios) define future verification. T03 completes specification decisions, not implementation testing.
 
 ## 2. Establish backend feasibility
 

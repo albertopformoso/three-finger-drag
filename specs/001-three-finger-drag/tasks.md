@@ -36,7 +36,7 @@ These tasks capture user decisions. They do not select new behavior without appr
 | T04 | Define motion and primary-button behavior. | RF-2, RF-3, RF-4, RF-6 | 25 min | T01 | Made when: Approved criteria define initial movement, direction, scaling, acceleration, repositioning, and left-handed button behavior. Evidence: [T04 decisions](#t04-completion-evidence). | done |
 | T05 | Define failed-drag termination and pending release. | RF-8, RF-9 | 25 min | T03 | Made when: Approved terms distinguish terminated gestures from pending releases and define ordinary-input routing during cleanup. Evidence: [T05 decisions](#t05-completion-evidence). | done |
 | T06 | Define enablement, recovery, and rearming. | RF-2, RF-7, RF-8, RF-9 | 25 min | T05 | Made when: Approved criteria cover startup, disablement, recovery, fresh contacts, and contacts remaining after expiry. Evidence: [T06 decisions](#t06-completion-evidence). | done |
-| T07 | Define physical-button and other-device interactions. | RF-3, RF-7, RF-8, RF-9 | 25 min | T04, T06 | Made when: Approved criteria cover physical buttons, other pointers, multiple touchpads, duplicate instances, and explicit cancellation. | - |
+| T07 | Define physical-button and other-device interactions. | RF-3, RF-7, RF-8, RF-9 | 25 min | T04, T06 | Made when: Approved criteria cover physical buttons, other pointers, multiple touchpads, duplicate instances, and explicit cancellation. Evidence: [T07 decisions](#t07-completion-evidence). | done |
 | T08 | Define lifecycle and desktop interruption behavior. | RF-4, RF-8, RF-9 | 25 min | T05, T06 | Made when: Approved criteria cover exit, crash, lock, suspend, session loss, monitor changes, and target-window disappearance. | - |
 | T09 | Select the compatibility and macOS baseline. | RF-1, RF-4, RF-8 | 25 min | None | Made when: The user approves device capabilities, versions, applications, XWayland scope, window states, and the macOS reference. | - |
 | T10 | Define measurable responsiveness and comparison rules. | RF-2, RF-3, RF-6, RF-7, RF-9 | 25 min | T03, T04, T09 | Made when: Approved limits and measurement methods cover start, motion, continuation, release, and recoverable failure cleanup. | - |
@@ -151,6 +151,26 @@ The user approved these decisions in the T06 clarification discussion:
 Evidence: [RF-2 enablement](spec.md#enablement-and-rearming), [RF-7](spec.md#rf-7-end-a-drag), [RF-8](spec.md#rf-8-preserve-ordinary-gestures), and [RF-9](spec.md#rf-9-end-a-drag-after-failure).
 [Resolved OQ-5 and OQ-6](spec.md#resolved-decisions) and [plan decisions](plan.md#approved-t06-decisions) record the approved behavior.
 The [T06 acceptance scenarios](plan.md#t06-acceptance-scenarios) define future verification. T06 completes specification decisions, not implementation testing.
+
+### T07 completion evidence
+
+The user approved these decisions in the T07 clarification discussion:
+
+- Physical presses on the selected touchpad terminate dragging or grace and release the utility's held button.
+- Consume the terminating press and its matching release to avoid an additional click.
+- Preserve physical-button actions that began outside the gesture.
+- Require all selected-touchpad physical buttons released and zero valid contacts before rearming.
+- Let other pointing devices retain normal behavior without interception or termination of this gesture.
+- Recognize dragging on one selected touchpad. Never combine contacts across devices.
+- Reject a second instance in the same desktop session without disturbing the existing instance.
+- Direct enable and disable commands to the existing instance.
+- Provide explicit cancellation that stops movement, cancels timers, releases the hold, and preserves requested enablement.
+- Require fresh contacts after cancellation. Apply T05 if release fails.
+- Cancellation does not guarantee undo. The application may treat release as a drop.
+
+Evidence: [RF-2 rearming](spec.md#enablement-and-rearming), [RF-7 termination](spec.md#physical-button-termination-and-explicit-cancellation), and [RF-8 devices](spec.md#other-devices-and-duplicate-instances).
+[Resolved OQ-7](spec.md#resolved-decisions), [plan decisions](plan.md#approved-t07-decisions), and [T07 acceptance scenarios](plan.md#t07-acceptance-scenarios) record behavior and future verification.
+T07 completes specification decisions, not implementation testing.
 
 ## 2. Establish backend feasibility
 

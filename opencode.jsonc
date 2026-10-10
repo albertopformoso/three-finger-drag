@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "skills": ["./skills"],
+  "commands": {
+    "ste-writing": {
+      "description": "Write or revise prose with the ste-writing skill",
+      "template": "Load the ste-writing skill and follow its instructions for this request:\n\n$ARGUMENTS"
+    }
+  }
+}

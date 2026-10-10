@@ -15,8 +15,7 @@ The input backend remains provisional until its feasibility checks pass.
 
 | Decision | Required clarification | Coverage |
 | --- | --- | --- |
-| Pointer behavior | Define motion scaling, acceleration, direction, and measurable response limits. | RF-3, RF-6, OQ-9 |
-| Drag action | Confirm the logical primary-button action, including left-handed settings. | RF-2, RF-4, RF-7 |
+| Pointer verification | Define numerical tolerances and response limits for T04's ordinary-pointing match. | RF-3, RF-6, OQ-9 |
 | Failure state | Distinguish a terminated gesture from a button release that remains pending. | RF-8, RF-9 |
 | Recovery | Define recovery, fresh-contact requirements, enablement, and disablement. | RF-2, RF-8, RF-9, OQ-5, OQ-6 |
 | External actions | Define physical buttons, other pointing devices, cancellation, and lifecycle interruptions. | RF-3, RF-7, RF-8, RF-9, OQ-7 |
@@ -25,7 +24,7 @@ The input backend remains provisional until its feasibility checks pass.
 
 RF-9 cannot define failure completion solely through the existing held-button definition of an active drag.
 
-The specification must also address stationary drags outside grace, contact noise, and contacts remaining after expiry.
+The specification must also address contact noise and contacts remaining after expiry.
 It must define outcomes for process exit, session lock, suspend, device changes, and target-window disappearance.
 
 The completion criteria must preserve the constitution's macOS-equivalence requirement.
@@ -47,7 +46,7 @@ Coverage: RF-2 and RF-3. Specification reference: RF-2 and resolved OQ-3.
 - Default to 1 mm. Accept configurable finite numeric thresholds greater than zero.
 - Reject zero, negative, nonnumeric, and nonfinite thresholds.
 
-The default still requires macOS comparison. T04 defines pointer scaling and initial output movement.
+The default still requires macOS comparison. T04 matches ordinary pointing and discards movement through the threshold-crossing event.
 T11 defines invalid-configuration recovery and configuration changes during a drag.
 T03 uses the same displacement threshold for grace-period continuation.
 
@@ -85,9 +84,26 @@ Coverage: RF-5, RF-6, and RF-7. Specification references: resolved OQ-1 and OQ-4
 - Cancel the timer after successful continuation. A later interruption starts a new grace period.
 - At the exact deadline, expiry takes priority over qualifying movement and candidate lift. Release once.
 
-T04 defines output movement at continuation. T06 defines rearming after expiry.
+T04 discards movement through the continuation threshold-crossing event. T06 defines rearming after expiry.
 T11 defines configuration changes during a drag and invalid-configuration recovery.
 The 300 ms default requires comparison with macOS.
+
+### Approved T04 decisions
+
+Coverage: RF-2, RF-3, RF-4, and RF-6.
+
+- Start or resume at the current pointer position. Discard movement through the threshold-crossing event, including any overshoot.
+- Establish the motion baseline at that event's group position. Move only with subsequent group movement.
+- Match ordinary one-finger pointing direction, sensitivity, and acceleration on the same touchpad.
+- Preserve rightward and upward pointer directions. Ignore natural-scrolling direction for pointer movement.
+- Hold the logical primary button, respecting the desktop's left-handed mapping.
+- When contact identities change while the count stays three, keep the hold and reset the motion baseline.
+- Discard contact-replacement displacement. Continue with subsequent movement without requiring another recognition threshold.
+- While three contacts remain stationary outside grace, stop pointer motion and retain the hold indefinitely.
+- Do not start a grace timer solely because active-drag contacts become stationary.
+
+Stationary returns during grace still follow T03's fixed deadline and continuation threshold.
+T10 defines numerical tolerances and response-time limits. Backend feasibility must verify the ordinary-pointing match.
 
 ## 2. Module structure
 
@@ -142,6 +158,11 @@ Exclude the utility's virtual devices from device discovery to prevent feedback 
 The virtual touchpad retains the physical device's relevant capabilities, axis ranges, and resolution.
 The adapter must preserve ordinary one-finger pointing and two-finger scrolling.
 The virtual pointer must retain button ownership throughout a drag and its grace period.
+Map logical primary-button effects through the desktop's button mapping. Do not assume a physical left-button event always means primary.
+Preserve the output button identity needed to release the held action.
+Pass ordinary-touchpad motion settings as values across the platform boundary. Keep desktop queries outside the gesture package.
+The adapter must reproduce ordinary-touchpad sensitivity and acceleration without applying acceleration twice.
+Identical settings on a virtual mouse do not alone prove an equivalent touchpad response.
 
 ### Backend feasibility conditions
 
@@ -158,7 +179,7 @@ Before adopting this backend, verify these conditions:
 3. Gesture ownership can change without extra clicks, pointer jumps, stale contacts, or competing gestures.
 4. The ending tap reaches the gesture logic but generates no additional desktop click.
 5. Repositioned contacts can return to ordinary input without stale gesture state.
-6. Relative drag motion avoids duplicate acceleration and preserves fractional movement.
+6. Relative drag motion matches ordinary-touchpad sensitivity and acceleration, avoids duplicate acceleration, and preserves fractional movement.
 7. Device teardown and process failure do not leave a held drag action in Hyprland.
 8. Session loss and restoration cannot deliver stale movement or a delayed release into another session.
 
@@ -166,6 +187,7 @@ If these checks fail, revise the backend decision before implementation proceeds
 Do not claim that the proxy already preserves every libinput behavior.
 The touchpad acceptance baseline must verify palm detection, thumb inclusion, and partial-multitouch hardware support.
 It must also verify contact identities and axis resolution for millimeter measurements.
+Verify logical primary-button behavior with both standard and left-handed mappings.
 
 ## 4. Data model
 
@@ -176,10 +198,10 @@ Coverage: RF-1 through RF-9. Constitution principles 3 and 5.
 | Record | Main fields | Rules and coverage |
 | --- | --- | --- |
 | Contact frame | Device ID, sequence, monotonic timestamp, contact IDs, positions, classification | Complete frames only. RF-2, RF-3, RF-5, RF-7. |
-| Gesture policy | Shared start/continuation threshold, tap limits, grace duration, expiry precedence, motion mapping | T01 through T03 approve recognition and grace rules. Motion mapping remains open. RF-2 through RF-7. |
+| Gesture policy | Shared start/continuation threshold, tap limits, grace duration, expiry precedence, ordinary-pointing motion values | T01 through T04 approve recognition, grace, and motion behavior. RF-2 through RF-7. |
 | Gesture state | Phase, valid contact identities, start baseline, continuation baseline, motion baseline, grace deadline, timer generation | Keep recognition baselines fixed for each contact group. No disk serialization. RF-2 through RF-7. |
 | Tap candidate | Contact identity, initial position, touchdown time, maximum displacement, cancellation state, all-contacts-lifted eligibility | Keep in memory. Reset after the required zero-contact state. RF-7. |
-| Output state | Desired button state, submitted button state, release pending, output-session identity | Keep failed release separate from gesture completion. RF-2, RF-7, RF-9. |
+| Output state | Desired button state, submitted button state, held output button, release pending, output-session identity | Map logical primary at the adapter boundary. Keep failed release separate. RF-2, RF-4, RF-7, RF-9. |
 | Effect | Hold button, move pointer, release button, schedule timer, cancel timer, route input | Abstract commands without native handles. RF-2 through RF-9. |
 | Availability | Enabled state, device access, output access, desktop availability | Determines readiness and failure handling. RF-1, RF-8, RF-9. |
 | Explicit configuration | Schema version, drag-start threshold, ending-tap limits, and other approved user-selected settings | Only this record may persist. RF-1, RF-2, RF-5, RF-7, RF-9. |
@@ -311,21 +333,25 @@ Coverage: RF-2, RF-3, RF-4, RF-8.
 7. Calculate the straight-line distance from the fixed start baseline. Do not sum frame-to-frame distances.
 8. If displacement is below the configured threshold, generate no drag.
 9. If displacement reaches or exceeds the threshold, claim the gesture through the verified routing procedure.
-10. Submit the approved primary-button hold at the current pointer position.
+10. Submit a logical primary-button hold through the desktop mapping at the current pointer position.
 11. If submission fails, enter the failure procedure.
-12. Establish the motion baseline and enter the dragging phase.
-13. Apply the approved initial-motion rule without an absolute pointer warp.
+12. Establish the motion baseline at the threshold-crossing event's group position and enter the dragging phase.
+13. Discard all movement through that event. Emit movement only for subsequent group changes.
 
 ### Move and pause
 
 Coverage: RF-3, RF-4, RF-5.
 
-1. While exactly three valid contacts remain, calculate their group movement from the motion baseline.
-2. Submit relative motion without another button press.
-3. Outside grace, if the contact count departs from three, stop gesture-driven pointer movement.
-4. Enter grace with a new timer generation. Set the deadline to interruption time plus the configured grace duration.
-5. Keep the drag action held during the grace phase.
-6. Preserve the deadline through later contact changes and stationary contacts. Do not restart or extend it.
+1. Outside grace, check valid contact count and identities before calculating motion.
+2. If the count departs from three, stop gesture-driven pointer movement and enter grace with a new timer generation.
+3. Set the grace deadline to interruption time plus the configured duration.
+4. If identities change while the count stays three, reset the motion baseline to the new group position.
+5. For that identity-change event, emit no motion, button transition, or grace timer.
+6. Otherwise, calculate subsequent group displacement from the motion baseline.
+7. Map that displacement and speed to the ordinary one-finger pointing response through the verified motion path.
+8. Submit relative motion without another button press. Update the motion baseline.
+9. When contacts stop moving, emit no further gesture-driven motion. Keep the hold without a stationary-contact timeout.
+10. During grace, preserve the hold and deadline through later contact changes and stationary returns.
 
 File managers, text widgets, and draggable title bars receive the same ordinary drag action.
 The utility does not move files directly, edit selections, or command arbitrary window movement.
@@ -341,8 +367,9 @@ Coverage: RF-5, RF-6.
 5. Below the shared drag-start threshold, preserve the pause and deadline.
 6. At or above the threshold strictly before expiry, cancel the current timer generation.
 7. Enter dragging without releasing or pressing the button again.
-8. Establish the motion baseline and apply T04's approved continuation-motion rule.
-9. Exclude absolute contact displacement caused by repositioning.
+8. Establish the motion baseline at the threshold-crossing event's group position.
+9. Discard all movement through that event, including repositioning displacement and threshold overshoot.
+10. Emit motion only for subsequent group changes, using the ordinary-pointing mapping.
 
 A later departure from three contacts creates a new grace deadline under the move-and-pause procedure.
 
@@ -407,6 +434,8 @@ Kernel device teardown and compositor behavior therefore require direct failure 
 | Narrow libevdev binding | Reuses Linux device handling, synchronization recovery, and virtual-device support. | Handwritten ioctl structures duplicate platform-sensitive work. | RF-1, RF-8, RF-9 |
 | Virtual pointer for drag output | Uses ordinary desktop drag behavior for all three user operations. | Application-specific automation does not cover arbitrary applications. | RF-2, RF-3, RF-4, RF-7 |
 | Relative pointer motion | Preserves the current pointer position and supports contact repositioning. | Absolute touchpad mapping causes unwanted pointer relocation. | RF-2, RF-3, RF-6 |
+| Ordinary-touchpad motion mapping | Matches the user's existing pointing direction, sensitivity, and acceleration. | Independent drag sensitivity introduces a different response. | RF-3, RF-6 |
+| Logical primary-button effects | Preserves selection and dragging under left-handed settings. | A fixed physical left-button mapping can trigger a secondary action. | RF-2, RF-4 |
 | Keep Hyprland's libinput path for ordinary gestures | Avoids reimplementing ordinary pointing and scrolling. | A complete custom touchpad interpreter expands scope and risks RF-8. | RF-1, RF-8 |
 | JSON for explicit configuration | The Go standard library supports parsing and serialization. | YAML requires another parser. A database has no required role. | RF-1, RF-5, RF-7, RF-9 |
 | Atomic XDG configuration writes | Satisfies the persistence principle and interrupted-save requirement. | In-place writes can leave partial configuration. | RF-1, RF-9, NFR-6 |
@@ -542,6 +571,29 @@ Times below are relative to the first interruption.
 
 Also test a detected palm beside the returning group. It must change neither baseline nor deadline.
 Use injected monotonic time to verify exact-deadline precedence independently of callback ordering.
+
+### T04 acceptance scenarios
+
+Coverage: RF-2, RF-3, RF-4, and RF-6. These scenarios define future tests, not executed implementation tests.
+
+| Scenario | Expected result |
+| --- | --- |
+| Start displacement crosses a 1 mm threshold at 1.4 mm | Hold primary at the existing pointer position. Emit no motion for the crossing event. |
+| A subsequent event moves the same group by 0.2 mm | Map only that 0.2 mm movement through the ordinary-pointing response. |
+| Continuation qualifies before expiry with threshold overshoot | Cancel grace and keep the hold. Discard all motion through the crossing event. |
+| Fingers return at a distant touchpad position | Repositioning causes no pointer movement. Only movement after qualifying continuation moves the pointer. |
+| Equivalent group and one-finger trajectories use equal displacement and speed | Pointer direction, sensitivity, and acceleration match within T10's future numerical tolerances. |
+| Group movement is rightward or upward | Pointer movement is rightward or upward, respectively. |
+| Natural scrolling is enabled or disabled | The same group trajectory produces the same pointer direction. |
+| Left-handed mode swaps physical button mappings | Start produces ordinary primary-button selection or dragging, not a secondary action. |
+| A contact identity changes while three valid contacts remain | Keep the hold and reset the motion baseline. Emit no replacement movement or grace timer. |
+| The new group then moves less than the start threshold | Move normally. Contact replacement during dragging requires no new recognition threshold. |
+| Three active-drag contacts stop for longer than the grace duration | Stop pointer motion and retain the hold. No grace timer starts. |
+| Three contacts return during grace and remain stationary | Preserve T03's deadline and release at expiry. |
+
+Use deterministic effect tests for threshold, baseline, and stationary-contact rules.
+Use desktop comparisons for sensitivity, acceleration, and button mapping. A successful output write alone cannot prove these behaviors.
+Document comparison trajectories and aggregate results without saving input recordings.
 
 ### Adapter integration tests
 

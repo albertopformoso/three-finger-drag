@@ -15,7 +15,7 @@ The input backend remains provisional until its feasibility checks pass.
 
 | Decision | Required clarification | Coverage |
 | --- | --- | --- |
-| Gesture recognition | Define valid contacts, movement thresholds, staggered contacts, and ending taps. | RF-2, RF-3, RF-7, OQ-2, OQ-3 |
+| Ending-tap recognition | Define ending-tap contacts, duration, and movement tolerance. T01 resolves drag-start recognition. | RF-7, OQ-2 |
 | Timing | Define grace duration, restart rules, stationary contacts, and events at expiry. | RF-5, RF-6, RF-7, OQ-1, OQ-4 |
 | Pointer behavior | Define motion scaling, acceleration, direction, and measurable response limits. | RF-3, RF-6, OQ-9 |
 | Drag action | Confirm the logical primary-button action, including left-handed settings. | RF-2, RF-4, RF-7 |
@@ -23,7 +23,7 @@ The input backend remains provisional until its feasibility checks pass.
 | Recovery | Define recovery, fresh-contact requirements, enablement, and disablement. | RF-2, RF-8, RF-9, OQ-5, OQ-6 |
 | External actions | Define physical buttons, other pointing devices, cancellation, and lifecycle interruptions. | RF-3, RF-7, RF-8, RF-9, OQ-7 |
 | Compatibility | Select touchpads, Hyprland versions, applications, window states, and the macOS reference. | RF-1, RF-4, OQ-8 |
-| Configuration | Define public settings, defaults, validation limits, and invalid-configuration behavior. | RF-1, RF-5, RF-7, RF-9 |
+| Configuration | Define remaining settings and invalid-configuration behavior. T01 approves the configurable drag-start threshold. | RF-1, RF-2, RF-5, RF-7, RF-9 |
 
 RF-5 currently prescribes a timer start during situations where OQ-4 leaves timer restarts open.
 RF-3 and RF-7 also require an explicit precedence rule at grace-period expiry.
@@ -34,6 +34,26 @@ It must define outcomes for process exit, session lock, suspend, device changes,
 
 The completion criteria must preserve the constitution's macOS-equivalence requirement.
 User acceptance of unspecified differences does not establish equivalence.
+
+### Approved T01 decisions
+
+Coverage: RF-2 and RF-3. Specification reference: RF-2 and resolved OQ-3.
+
+- Exclude detected palms and include thumbs in valid contacts.
+- Use the arithmetic average of exactly three valid contact positions for group movement.
+- Allow individual fingers to remain stationary.
+- Allow staggered placement without a time limit.
+- Establish the start baseline when the third valid contact arrives.
+- Before drag start, discard the baseline when valid contact count or identities change.
+- Establish a fresh baseline whenever exactly three valid contacts remain after that change.
+- Measure Euclidean displacement from the fixed baseline in touchpad millimeters.
+- Start when displacement reaches or exceeds the threshold. Do not accumulate traveled distance.
+- Default to 1 mm. Accept configurable finite numeric thresholds greater than zero.
+- Reject zero, negative, nonnumeric, and nonfinite thresholds.
+
+The default still requires macOS comparison. T04 defines pointer scaling and initial output movement.
+T11 defines invalid-configuration recovery and configuration changes during a drag.
+The start threshold does not define grace-period continuation behavior.
 
 ## 2. Module structure
 
@@ -110,7 +130,8 @@ Before adopting this backend, verify these conditions:
 
 If these checks fail, revise the backend decision before implementation proceeds.
 Do not claim that the proxy already preserves every libinput behavior.
-The touchpad acceptance baseline must also settle palm rejection and partial-multitouch hardware support.
+The touchpad acceptance baseline must verify palm detection, thumb inclusion, and partial-multitouch hardware support.
+It must also verify contact identities and axis resolution for millimeter measurements.
 
 ## 4. Data model
 
@@ -121,12 +142,12 @@ Coverage: RF-1 through RF-9. Constitution principles 3 and 5.
 | Record | Main fields | Rules and coverage |
 | --- | --- | --- |
 | Contact frame | Device ID, sequence, monotonic timestamp, contact IDs, positions, classification | Complete frames only. RF-2, RF-3, RF-5, RF-7. |
-| Gesture policy | Start threshold, tap rules, grace duration, timer precedence, motion mapping | Values require specification approval. RF-2 through RF-7. |
-| Gesture state | Phase, contact baseline, grace deadline, timer generation | No disk serialization. RF-2 through RF-7. |
+| Gesture policy | Start threshold in millimeters, tap rules, grace duration, timer precedence, motion mapping | T01 approves the start threshold. Remaining rules require approval. RF-2 through RF-7. |
+| Gesture state | Phase, valid contact identities, start baseline, motion baseline, grace deadline, timer generation | Separate fixed start and movement baselines. No disk serialization. RF-2 through RF-7. |
 | Output state | Desired button state, submitted button state, release pending, output-session identity | Keep failed release separate from gesture completion. RF-2, RF-7, RF-9. |
 | Effect | Hold button, move pointer, release button, schedule timer, cancel timer, route input | Abstract commands without native handles. RF-2 through RF-9. |
 | Availability | Enabled state, device access, output access, desktop availability | Determines readiness and failure handling. RF-1, RF-8, RF-9. |
-| Explicit configuration | Schema version and approved user-selected settings | Only this record may persist. RF-1, RF-5, RF-7, RF-9. |
+| Explicit configuration | Schema version, drag-start threshold, and other approved user-selected settings | Only this record may persist. RF-1, RF-2, RF-5, RF-7, RF-9. |
 
 Use monotonic timestamps from one mapped clock domain.
 Device timestamps and timer deadlines must be comparable before the runtime orders events.
@@ -171,7 +192,7 @@ Integration tests must observe the resulting desktop behavior separately.
 
 ### Configuration persistence
 
-Coverage: RF-1, RF-5, RF-7, RF-9. NFR-5 and NFR-6.
+Coverage: RF-1, RF-2, RF-5, RF-7, RF-9. NFR-5 and NFR-6.
 
 Use JSON through the Go standard library for approved explicit settings.
 Use `$XDG_CONFIG_HOME/three-finger-drag/config.json` when `XDG_CONFIG_HOME` specifies an absolute directory.
@@ -181,6 +202,12 @@ Do not create a configuration file merely because the utility starts.
 Reject unknown fields and unsupported schema versions with English errors.
 The specification must define whether invalid configuration stops startup or selects an approved fallback.
 Public timing settings remain pending OQ-1. This plan assigns no default grace duration.
+
+Use `drag_start_threshold_mm` for the approved drag-start setting.
+If the setting is absent, use 1 mm without writing an implicit default to disk.
+Accept only a finite JSON number greater than zero. Reject strings, booleans, null, zero, negative values, and nonfinite values.
+Do not convert numeric strings into numbers.
+Pass the validated threshold to gesture logic as a policy value, without exposing configuration access to that package.
 
 Atomic save procedure:
 
@@ -231,19 +258,24 @@ Coverage: RF-2 through RF-9.
 Coverage: RF-2, RF-3, RF-4, RF-8.
 
 1. If the feature is not ready, apply the approved unavailable-state routing policy.
-2. If the contact count differs from three, preserve permitted ordinary input.
-3. If three contacts remain below the approved movement threshold, generate no drag or click.
-4. If exactly three contacts satisfy the approved movement rule, claim the gesture through the verified routing procedure.
-5. Submit the approved primary-button hold at the current pointer position.
-6. If submission fails, enter the failure procedure.
-7. Establish the contact baseline and enter the dragging phase.
-8. Apply the approved initial-motion rule without an absolute pointer warp.
+2. Exclude detected palms and include thumbs when forming the valid contact set.
+3. If the valid contact count or identities change, discard the previous start baseline.
+4. If the count differs from three, preserve permitted ordinary input and wait for exactly three valid contacts.
+5. If no start baseline exists, store the three contact identities and their average position in millimeters.
+6. On subsequent frames, calculate the current average position for the same three contacts.
+7. Calculate the straight-line distance from the fixed start baseline. Do not sum frame-to-frame distances.
+8. If displacement is below the configured threshold, generate no drag.
+9. If displacement reaches or exceeds the threshold, claim the gesture through the verified routing procedure.
+10. Submit the approved primary-button hold at the current pointer position.
+11. If submission fails, enter the failure procedure.
+12. Establish the motion baseline and enter the dragging phase.
+13. Apply the approved initial-motion rule without an absolute pointer warp.
 
 ### Move and pause
 
 Coverage: RF-3, RF-4, RF-5.
 
-1. While three valid contacts move, calculate relative motion from the current baseline.
+1. While exactly three valid contacts remain, calculate their group movement from the motion baseline.
 2. Submit relative motion without another button press.
 3. If the contact count changes from three, stop gesture-driven pointer movement.
 4. Enter the grace phase and schedule its approved deadline.
@@ -344,7 +376,7 @@ Assert observable effect sequences and state invariants rather than private impl
 
 | Coverage | Required checks |
 | --- | --- |
-| RF-2 | Start only with qualifying three-contact movement. Stationary contacts produce no generated click or drag. |
+| RF-2 | Start at the configured group-displacement threshold. Verify palms, thumbs, staggered placement, identity changes, and stationary contacts. |
 | RF-3 | Relative movement maintains one held button and does not issue repeated presses. |
 | RF-4 | Start effects hold the button before drag motion and preserve the current pointer origin. |
 | RF-5 | Zero, one, two, and additional contacts pause movement and apply the approved grace rules. |
@@ -357,6 +389,28 @@ Test before, at, and after every approved timing boundary.
 Test repeated contact changes, stationary contacts, delayed events, and contacts remaining after release.
 Use generated synthetic sequences to check balanced button ownership and stale-timer rejection.
 Keep generated events in memory.
+
+### T01 acceptance scenarios
+
+Coverage: RF-2 and RF-3. These are authored future tests, not executed implementation tests.
+
+| Scenario | Expected result |
+| --- | --- |
+| No configured threshold | Use 1 mm without creating configuration. |
+| Three-contact group displaces 0.99 mm from its baseline | No drag starts. |
+| The same group reaches 1 mm | Start one drag at the current pointer position. |
+| Threshold is 2 mm | No start at 1.99 mm. Start at 2 mm. |
+| One contact moves 3 mm while two remain stationary | The average position moves 1 mm and starts a drag with the default threshold. |
+| Three contacts remain stationary | Generate neither a click nor a drag. |
+| Contacts arrive separately with arbitrary delays | Establish the baseline only when the third valid contact arrives. |
+| Contacts move before the third contact arrives | Exclude earlier movement from start displacement. |
+| The group repeatedly moves out and back by 0.6 mm | No drag starts, even when total traveled distance exceeds 1 mm. |
+| Contact count changes or one identity changes before start | Reset the baseline. Count only displacement after a new three-contact baseline. |
+| A palm joins the same three valid contacts | Ignore the palm without changing the baseline. |
+| The group includes a thumb and two other fingers | Apply the same three-contact displacement rule. |
+| The configuration supplies zero, a negative number, a string, null, a boolean, or a nonfinite value | Reject the threshold. |
+
+Also test equal displacement along each axis and diagonally to verify direction-independent millimeter measurements.
 
 ### Adapter integration tests
 

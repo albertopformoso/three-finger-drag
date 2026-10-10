@@ -16,7 +16,7 @@ The input backend remains provisional until its feasibility checks pass.
 | Decision | Required clarification | Coverage |
 | --- | --- | --- |
 | Pointer verification | Define numerical tolerances and response limits for T04's ordinary-pointing match. | RF-3, RF-6, OQ-9 |
-| External actions | Define physical buttons, other pointing devices, cancellation, and lifecycle interruptions. | RF-3, RF-7, RF-8, RF-9, OQ-7 |
+| Lifecycle interruptions | Define process exit, session lock, suspend, and desktop changes under T08. | RF-4, RF-8, RF-9 |
 | Compatibility | Select touchpads, Hyprland versions, applications, window states, and the macOS reference. | RF-1, RF-4, OQ-8 |
 | Configuration | Define remaining settings and invalid-configuration behavior. T01 through T03 approve drag-start, ending-tap, and grace settings. | RF-1, RF-2, RF-5, RF-7, RF-9 |
 
@@ -139,6 +139,25 @@ Arming is a latch for the next fresh gesture, not a requirement that contacts re
 Consume it when a drag starts. Clear it on failure or disablement.
 Keep requested enablement separate from access, cleanup, armed state, and ordinary-input routing.
 
+### Approved T07 decisions
+
+Coverage: RF-3, RF-7, RF-8, and RF-9. RF-2's rearming criteria also require released physical buttons.
+
+- A physical button press on the selected touchpad terminates dragging or grace and releases the utility's held button.
+- Consume the terminating physical press and its matching release to avoid an additional click.
+- Preserve ordinary physical-button actions that began outside a three-finger drag.
+- Block recognition while a selected-touchpad physical button remains held.
+- Rearm only with all selected-touchpad physical buttons released and zero valid contacts, plus T06's other readiness checks.
+- Let the desktop process other pointing devices without interception or gesture termination.
+- Recognize three-finger dragging on one selected touchpad. Never combine contacts across devices.
+- Reject a second instance in the same desktop session with an error, without disturbing the existing instance.
+- Direct enable, disable, and cancel commands to the existing instance.
+- Cancellation stops movement, cancels timers, and releases the utility's hold while preserving requested enablement.
+- Require fresh contacts after cancellation. Apply T05 if release fails.
+
+Cancellation does not guarantee undo. Applications may treat release as a drop.
+The backend must preserve consumed-press tracking until the matching release, including across cleanup and disablement.
+
 ## 2. Module structure
 
 Use one Go module with Go 1.27.1 or later, as required by the repository.
@@ -188,6 +207,8 @@ The physical touchpad must have exactly one owner while the feature operates.
 Otherwise, Hyprland could process the physical gesture and the generated drag simultaneously.
 Do not capture unrelated keyboards or pointing devices.
 Exclude the utility's virtual devices from device discovery to prevent feedback loops.
+Select only one touchpad for gesture recognition. Leave other touchpads and pointing devices under normal desktop control.
+Do not monitor other pointing devices to cancel this gesture. Their events do not alter its lifetime.
 
 The virtual touchpad retains the physical device's relevant capabilities, axis ranges, and resolution.
 The adapter must preserve ordinary one-finger pointing and two-finger scrolling.
@@ -243,6 +264,8 @@ Coverage: RF-1 through RF-9. Constitution principles 3 and 5.
 | Effect | Hold button, move pointer, release button, schedule timer, cancel timer, route input | Abstract commands without native handles. RF-2 through RF-9. |
 | Availability | Configured startup state, optional runtime override, requested enablement, armed state, access, desktop availability, ordinary-input routing | Keep requested enablement and readiness separate. RF-1, RF-2, RF-7, RF-8, RF-9. |
 | Failure report state | Failed operation, cause, pending-release status, last reported error identity | Keep in memory. Suppress unchanged repeated errors without storing input events. RF-9. |
+| Physical-button state | Selected device identity, held physical buttons, consumed press identities awaiting release | Preserve button pairing across gesture termination and cleanup. Keep in memory. RF-7, RF-8. |
+| Instance ownership | Desktop-session identity and exclusive ownership handle | Reject duplicate startup before device acquisition. Runtime commands target the owner. RF-8. |
 | Explicit configuration | Schema version, startup enablement, drag-start threshold, ending-tap limits, grace duration, and other approved settings | Runtime overrides never persist. RF-1, RF-2, RF-5, RF-7, RF-9. |
 
 Use monotonic timestamps from one mapped clock domain.
@@ -345,6 +368,11 @@ References to approved policy remain unresolved until the specification supplies
 
 Coverage: RF-1, RF-8, RF-9.
 
+For normal startup, acquire exclusive instance ownership for the desktop session before opening or grabbing touchpads.
+If another instance owns the session, report an English error and exit without changing its resources.
+Use atomic ownership acquisition so simultaneous starts cannot both succeed.
+Control commands connect to the owner instead of acquiring ownership or starting another gesture-processing instance.
+
 1. Read explicit configuration and validate approved settings.
 2. Check the supported session, selected device, required access, and output capabilities.
 3. Prepare virtual devices and verify desktop recognition before routing input.
@@ -367,14 +395,33 @@ Coverage: RF-2, RF-7, RF-8, and RF-9.
 6. After cleanup, restore ordinary pointing and scrolling when touchpad access permits, independently of readiness.
 7. If requested enablement is disabled, allow normal desktop three-finger handling and remain disabled.
 8. If required access is unavailable, remain unarmed and unavailable for new drags.
-9. Once enabled, access is available, and cleanup is complete, wait for an observed zero-contact state.
-10. When zero valid contacts are observed, arm recognition and enter ready state.
+9. Once enabled, access is available, and cleanup is complete, wait for zero valid contacts and all physical touchpad buttons released.
+10. When both conditions hold, arm recognition and enter ready state.
 11. Permit subsequent fresh contacts to form a gesture without clearing arming merely because contacts appear.
 12. On drag start, consume arming. On failure, clear arming without changing requested enablement.
-13. At normal completion, rearm if zero contacts remain and readiness prerequisites hold. Otherwise, wait for all valid contacts to lift.
+13. At normal completion, rearm only if zero contacts, released physical buttons, and the other readiness prerequisites hold.
 
 Runtime commands must target the running instance. Their transport belongs to the command-interface implementation.
+An ordinary physical press clears arming. Preserve its normal button action and wait for the full rearming conditions afterward.
 Failed gestures never resume. Automatic recovery enables recognition only for a fresh gesture after readiness checks pass.
+
+### Physical buttons and explicit cancellation
+
+Coverage: RF-3, RF-7, RF-8, and RF-9.
+
+1. Track physical-button state only for the selected touchpad.
+2. If a release matches a consumed terminating press, consume it and clear that pairing record.
+3. If a physical press occurs during dragging or grace, record it for consumption and terminate the gesture.
+4. Stop gesture movement, discard queued movement, cancel timers, and clear armed recognition.
+5. Release only the utility's held output button. Apply T05 cleanup if release fails.
+6. Retain consumed-press records until their matching releases, even after ordinary input restoration or disablement.
+7. For physical actions outside a drag, preserve ordinary behavior unless pending cleanup requires suppression.
+8. Block recognition until all selected-touchpad physical buttons release and zero valid contacts satisfy T06's remaining readiness checks.
+9. On an explicit cancel command during dragging or grace, perform the same termination and cleanup without consuming unrelated physical events.
+10. Preserve requested enablement after cancellation. Do not resume the terminated gesture.
+
+Events from other pointers stay outside this procedure. Their motion can move the desktop pointer during the utility's held action.
+Do not claim that releasing the held action undoes an application operation.
 
 ### Event ordering
 
@@ -473,7 +520,7 @@ Coverage: RF-7, RF-8.
 3. Cancel the current timer generation.
 4. Submit one button release for the held drag action.
 5. If submission fails, enter the failure procedure.
-6. Clear gesture baselines and rearm only after zero valid contacts and the other readiness checks.
+6. Clear gesture baselines and rearm only after zero contacts, released physical touchpad buttons, and the other readiness checks.
 7. Restore ordinary input through the verified routing procedure.
 
 ### Handle failures
@@ -723,6 +770,32 @@ Coverage: RF-2, RF-7, RF-8, and RF-9. These scenarios define future tests, not e
 
 Use deterministic state tests to distinguish requested enablement, readiness, and ordinary-input routing.
 Use integration tests to verify commands reach the running instance and disabled operation restores normal desktop gestures.
+
+### T07 acceptance scenarios
+
+Coverage: RF-3, RF-7, RF-8, and RF-9. These scenarios define future tests, not executed implementation tests.
+For T06 scenarios, arming now also requires every selected-touchpad physical button released.
+
+| Scenario | Expected result |
+| --- | --- |
+| A physical touchpad button is pressed during dragging | Terminate, cancel timers, and release the utility's hold. Consume the physical press. |
+| A physical touchpad button is pressed during grace | Terminate without waiting for expiry. Consume the press and release the utility's hold. |
+| The consumed button later releases after cleanup or disablement | Consume the matching release. Generate no extra click or unmatched release. |
+| A physical button is already held when contacts qualify | Preserve its ordinary action. Do not start a three-finger drag. |
+| All physical buttons release while contacts remain | Keep recognition unarmed until zero valid contacts are observed. |
+| Contacts lift while a physical button remains held | Keep recognition unarmed until all physical buttons release with zero contacts. |
+| Another mouse moves or sends button events during dragging or grace | Let the desktop process them normally without interception or gesture termination. |
+| Contacts appear on an unselected touchpad | Preserve its ordinary behavior. Do not use those contacts for recognition. |
+| Two selected-touchpad contacts and one other-touchpad contact move | Do not combine them into a three-finger gesture. |
+| A second instance starts in the same desktop session | Reject it before device acquisition. Preserve the existing instance and any active gesture. |
+| Two instances attempt startup simultaneously | Exactly one acquires ownership. The other exits with an error. |
+| Enable, disable, or cancel commands target a running session | Deliver the command to its existing instance without starting another gesture processor. |
+| Cancellation occurs during dragging or grace | Stop movement, cancel timers, release, and require fresh contacts. Preserve enabled state. |
+| Release fails after physical termination or cancellation | Keep T05's pending cleanup and suppression. Do not resume the gesture. |
+
+Use deterministic tests for physical-button pairing, recognition blocking, and cancellation effects.
+Use integration tests for duplicate-instance ownership, command delivery, and desktop behavior with another pointing device.
+Observe application outcomes without asserting that cancellation reverses a drop.
 
 ### Adapter integration tests
 

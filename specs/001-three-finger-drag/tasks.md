@@ -30,7 +30,7 @@ These tasks capture user decisions. They do not select new behavior without appr
 
 | Task | Description | RF coverage | Time | Depends on | Completion criteria | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| T01 | Define contact recognition and drag-start thresholds. | RF-2, RF-3 | 25 min | None | Made when: Approved criteria cover contact validity, staggered placement, stationary fingers, and required finger movement. | - |
+| T01 | Define contact recognition and drag-start thresholds. | RF-2, RF-3 | 25 min | None | Made when: Approved criteria cover contact validity, staggered placement, stationary fingers, and required finger movement. Evidence: [T01 decisions](#t01-completion-evidence). | done |
 | T02 | Define the ending tap. | RF-7 | 20 min | T01 | Made when: Approved criteria specify finger count, duration, movement tolerance, recognition time, and tap consumption. | - |
 | T03 | Define grace timing and event precedence. | RF-5, RF-6, RF-7 | 25 min | T02 | Made when: Approved criteria cover duration, timer restarts, stationary returns, repeated changes, and events exactly at expiry. | - |
 | T04 | Define motion and primary-button behavior. | RF-2, RF-3, RF-4, RF-6 | 25 min | T01 | Made when: Approved criteria define initial movement, direction, scaling, acceleration, repositioning, and left-handed button behavior. | - |
@@ -42,6 +42,22 @@ These tasks capture user decisions. They do not select new behavior without appr
 | T10 | Define measurable responsiveness and comparison rules. | RF-2, RF-3, RF-6, RF-7, RF-9 | 25 min | T03, T04, T09 | Made when: Approved limits and measurement methods cover start, motion, continuation, release, and recoverable failure cleanup. | - |
 | T11 | Define explicit configuration behavior. | RF-1, RF-5, RF-7, RF-9 | 20 min | T03, T06 | Made when: Approved settings have defaults, bounds, missing-file behavior, invalid-value behavior, and rules for changes during a drag. | - |
 | T12 | Complete the specification consistency review. | RF-1 through RF-9 | 30 min | T01 through T11 | Made when: RF contradictions are resolved, release-blocking questions are closed, and completion criteria preserve the constitution. | - |
+
+### T01 completion evidence
+
+The user approved these decisions in the T01 clarification discussion:
+
+- Use the average position of exactly three valid contacts. Individual fingers may remain stationary.
+- Exclude detected palms and include thumbs.
+- Allow staggered placement without a time limit. Establish the baseline when the third valid contact arrives.
+- Start at a straight-line group displacement of at least 1 mm, configurable through the configuration file.
+- Accept finite numeric thresholds greater than zero. Reject zero, negative, nonnumeric, and nonfinite values.
+- Do not accumulate traveled distance or count movement before the baseline.
+- Before drag start, reset the baseline when valid contact count or identities change.
+- Three stationary contacts generate neither a click nor a drag.
+
+Evidence: [RF-2 and RF-3](spec.md#rf-2-start-a-drag), [resolved OQ-3](spec.md#resolved-decisions), and [plan decisions](plan.md#approved-t01-decisions).
+The [T01 acceptance scenarios](plan.md#t01-acceptance-scenarios) define future verification. T01 completes specification decisions, not implementation testing.
 
 ## 2. Establish backend feasibility
 

@@ -34,6 +34,11 @@ The team must resolve timing details and compare observable behavior with macOS 
 - **Ending tap:** A tap during the grace period that ends the drag. Its recognition rules remain open.
 - **Supported environment:** Arch Linux or CachyOS with Hyprland on Wayland and a compatible touchpad.
 - **Drag failure:** Touchpad disconnection, missing or revoked permissions, or loss of the desktop connection.
+- **Valid contact:** A finger contact, including a thumb, that is not a detected palm. Contact counts refer to valid contacts.
+- **Group position:** The arithmetic average of the three valid contacts' positions on the touchpad.
+- **Start baseline:** The group position when exactly three valid contacts form the current group, before a drag starts.
+- **Group displacement:** The straight-line distance from the start baseline to the current group position, measured in touchpad millimeters.
+- **Qualifying start movement:** Group displacement that reaches or exceeds the configured threshold while the same three valid contacts remain.
 
 Each requirement has acceptance criteria in EARS notation.
 The words WHERE, WHILE, WHEN, IF, THEN, and SHALL identify conditions and required responses.
@@ -46,15 +51,33 @@ Acceptance checks must cover both distributions. Compatible touchpads remain an 
 
 ### RF-2: Start a drag
 
-- WHILE ready, WHEN exactly three fingers move, the utility SHALL start a drag at the current pointer position.
+- WHILE ready, WHEN qualifying start movement occurs, the utility SHALL start a drag at the current pointer position.
 - WHEN a three-finger drag starts, the utility SHALL require no physical touchpad press.
 - WHILE ready, WHEN three fingers remain stationary, the utility SHALL generate neither a click nor a drag.
 - WHILE ready, WHEN the contact count differs from three, the utility SHALL refrain from starting a three-finger drag.
+- WHEN counting contacts, the utility SHALL exclude detected palms and include thumbs.
+- WHILE ready, WHEN exactly three valid contacts form a group, the utility SHALL establish its start baseline.
+- WHILE ready, the utility SHALL allow staggered finger placement without a placement time limit.
+- WHILE ready, WHEN contact count or identities change, the utility SHALL discard the previous start baseline.
+- WHILE ready, WHEN exactly three valid contacts remain after a change, the utility SHALL establish a new start baseline.
+- WHEN evaluating start movement, the utility SHALL use group displacement without requiring each finger to move.
+- WHEN evaluating start movement, the utility SHALL exclude movement before baseline creation and shall not accumulate traveled distance.
+- WHILE group displacement remains below the threshold, the utility SHALL refrain from starting a drag.
+- WHERE no drag-start threshold is configured, the utility SHALL use a default threshold of 1 mm.
+- WHEN reading configuration, the utility SHALL accept a drag-start threshold expressed as a finite number greater than zero, in millimeters.
+- IF a configured threshold is zero, negative, nonnumeric, or nonfinite, THEN the utility SHALL reject that value.
+
+The threshold applies in every direction and measures touchpad distance, not screen distance.
+Detected palms do not change the valid contact count, group position, or baseline.
+The 1 mm default requires comparison with macOS before any equivalence claim.
+Invalid-configuration recovery remains open under T11. Continuation thresholds remain outside this drag-start decision.
 
 ### RF-3: Move during a drag
 
-- WHILE a drag is active, WHEN exactly three fingers move, the utility SHALL move the pointer with their movement.
-- WHILE exactly three fingers move during a drag, the utility SHALL keep the drag action held.
+- WHILE dragging with three valid contacts, WHEN their group position moves, the utility SHALL move the pointer with that movement.
+- WHILE dragging with three valid contacts, WHEN their group position moves, the utility SHALL keep the drag action held.
+
+Individual fingers may remain stationary. RF-5 and RF-6 govern paused movement and continuation during the grace period.
 
 ### RF-4: Drag files, select text, and move windows
 
@@ -123,6 +146,15 @@ Failure recovery remains an open question. Recovery must not resume the interrup
 | --- | --- |
 | Three stationary fingers while ready | No generated click or drag. |
 | Contact count differs from three while ready | No three-finger drag starts. |
+| Three contacts arrive separately | Establish the baseline when the third valid contact arrives, without a placement time limit. |
+| Movement occurs before the third valid contact arrives | Exclude that movement from group displacement. |
+| One finger moves while two remain stationary | Start when their average position reaches the configured displacement threshold. |
+| Group displacement equals the threshold | Start the drag. |
+| Back-and-forth movement stays below the threshold | No drag starts, regardless of total distance traveled. |
+| Valid contact count or identities change before drag start | Discard the baseline. Establish a new baseline when exactly three valid contacts remain. |
+| A detected palm touches beside three valid contacts | Exclude the palm. Keep the existing baseline. |
+| One thumb and two other fingers form the group | Count all three contacts unless a contact is a detected palm. |
+| A configured threshold is zero, negative, nonnumeric, or nonfinite | Reject the value. Configuration recovery remains open under T11. |
 | All fingers lift during a drag | The grace period starts. |
 | Contact count changes from three to one, two, or more than three | The grace period starts. |
 | Exactly three fingers resume movement before expiry | The same drag continues without an intervening release. |
@@ -160,11 +192,14 @@ Failure recovery remains an open question. Recovery must not resume the interrup
 - The macOS comparison records observable differences and the user accepts any remaining differences.
 - The team resolves release-blocking questions. The user explicitly accepts any deferred questions.
 
+## Resolved decisions
+
+- **OQ-3 (T01):** Use group displacement with a configurable 1 mm default. RF-2 defines contact validity, staggered placement, and baseline resets.
+
 ## [OPEN QUESTIONS]
 
 - **OQ-1:** What is the grace-period duration? Can users change it?
 - **OQ-2:** What finger count, duration, and movement tolerance define an ending tap?
-- **OQ-3:** What movement threshold starts a drag? Must all three fingers move? How should staggered contacts behave?
 - **OQ-4:** Do three stationary fingers affect the grace timer? Can further contact changes restart it? What happens exactly at expiry?
 - **OQ-5:** After a failure, must users explicitly enable the feature again? Can availability recover automatically without resuming the interrupted drag?
 - **OQ-6:** How do users enable or disable the feature? What happens when they disable it during a drag?

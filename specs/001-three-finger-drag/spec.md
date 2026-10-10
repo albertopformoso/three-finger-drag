@@ -41,6 +41,9 @@ The team must resolve timing details and compare observable behavior with macOS 
 - **Start baseline:** The group position when exactly three valid contacts form the current group, before a drag starts.
 - **Group displacement:** The straight-line distance from the start baseline to the current group position, measured in touchpad millimeters.
 - **Qualifying start movement:** Group displacement that reaches or exceeds the configured threshold while the same three valid contacts remain.
+- **Grace deadline:** The time of the first contact-count departure from three during dragging, plus the configured grace duration.
+- **Continuation baseline:** The group position when exactly three valid contacts form the current group during the grace period.
+- **Qualifying continuation movement:** Displacement from the continuation baseline that reaches the drag-start threshold while the same three valid contacts remain.
 
 Each requirement has acceptance criteria in EARS notation.
 The words WHERE, WHILE, WHEN, IF, THEN, and SHALL identify conditions and required responses.
@@ -72,7 +75,7 @@ Acceptance checks must cover both distributions. Compatible touchpads remain an 
 The threshold applies in every direction and measures touchpad distance, not screen distance.
 Detected palms do not change the valid contact count, group position, or baseline.
 The 1 mm default requires comparison with macOS before any equivalence claim.
-Invalid-configuration recovery remains open under T11. Continuation thresholds remain outside this drag-start decision.
+Invalid-configuration recovery remains open under T11. RF-6 uses this same threshold for continuation.
 
 ### RF-3: Move during a drag
 
@@ -92,20 +95,35 @@ The gesture starts at the current pointer position, not the fingers' absolute to
 
 ### RF-5: Pause a drag
 
-- WHILE a drag is active, WHEN all fingers lift, the utility SHALL start the grace period.
-- WHEN an active drag's contact count changes from three, the utility SHALL start the grace period.
+- WHILE dragging outside the grace period, WHEN contact count departs from three, the utility SHALL start the grace period.
+- WHEN the grace period starts, the utility SHALL set its deadline to the interruption time plus the configured duration.
 - WHILE the grace period is active, the utility SHALL keep the drag action held.
 - WHILE the grace period is active, the utility SHALL pause gesture-driven pointer movement until RF-6 applies.
+- WHILE the grace period is active, WHEN contacts change, the utility SHALL preserve the existing deadline.
+- WHILE three valid contacts remain stationary during the grace period, the utility SHALL keep the existing timer running.
+- WHERE no grace duration is configured, the utility SHALL use 300 ms.
+- WHEN reading configuration, the utility SHALL accept a grace duration in milliseconds as a finite number greater than zero.
+- IF the configured grace duration is zero, negative, nonnumeric, or nonfinite, THEN the utility SHALL reject that value.
 
 These criteria cover zero, one, two, or more than three contacts.
-Contact changes within an existing grace period have unresolved timer rules.
+Further changes, including lifting all remaining fingers, do not restart or extend the timer.
+After successful continuation, a later departure from three starts a new grace period with a new deadline.
+The default requires comparison with macOS. T11 defines invalid-configuration recovery and changes during a drag.
 
 ### RF-6: Continue a drag
 
-- WHILE the grace period remains unexpired, WHEN exactly three fingers resume movement, the utility SHALL continue the same drag.
+- WHILE the grace period is active, WHEN exactly three valid contacts form a group, the utility SHALL establish its continuation baseline.
+- WHILE the grace period is active, WHEN contact count or identities change, the utility SHALL discard the previous continuation baseline.
+- WHEN exactly three valid contacts remain after that change, the utility SHALL establish a fresh continuation baseline during grace.
+- WHEN qualifying continuation movement occurs strictly before the grace deadline, the utility SHALL continue the same drag.
+- WHILE continuation displacement remains below the drag-start threshold, the utility SHALL preserve the pause and the grace deadline.
 - WHEN a drag continues, the utility SHALL cancel the current grace period.
 - WHEN a drag continues, the utility SHALL keep the drag action held without an intervening release.
 - WHEN repositioned fingers resume movement, the utility SHALL prevent a pointer jump caused solely by their new contact positions.
+
+Continuation uses straight-line displacement of the group's average position in touchpad millimeters, not accumulated traveled distance.
+Individual fingers may remain stationary. The shared threshold defaults to 1 mm and follows the drag-start configuration.
+Contact changes reset the continuation baseline without changing the deadline. Detected palms do not change valid contacts.
 
 ### RF-7: End a drag
 
@@ -113,6 +131,11 @@ Contact changes within an existing grace period have unresolved timer rules.
 - WHILE the grace period is active, WHEN an ending tap occurs, the utility SHALL release the drag action immediately.
 - WHEN an ending tap occurs, the utility SHALL consume the tap without generating an additional click.
 - WHEN the utility releases the drag action, the utility SHALL end the active drag.
+- WHEN movement coincides exactly with the grace deadline, the utility SHALL process expiry before evaluating continuation.
+- WHEN candidate lift coincides exactly with the grace deadline, the utility SHALL end through expiry without recognizing an ending tap.
+- WHEN expiry coincides with movement or candidate lift, the utility SHALL release the held drag action only once.
+
+Movement at or after the deadline cannot continue the expired drag.
 
 #### Ending-tap recognition
 
@@ -140,7 +163,7 @@ Exceeding a movement limit cancels the candidate even if the finger returns to i
 Canceling a candidate does not itself end the drag. The existing drag and grace-period rules still apply.
 Duration uses milliseconds. Movement uses millimeters and remains independent of the drag-start threshold.
 The defaults require comparison with macOS before an equivalence claim.
-T03 defines precedence when candidate lift coincides exactly with grace expiry.
+Expiry takes priority when candidate lift coincides exactly with the grace deadline.
 T11 defines invalid-configuration recovery and changes to configuration during a drag.
 
 The application determines the result of the release. A release does not guarantee that a file drop succeeds.
@@ -186,10 +209,15 @@ Failure recovery remains an open question. Recovery must not resume the interrup
 | A detected palm touches beside three valid contacts | Exclude the palm. Keep the existing baseline. |
 | One thumb and two other fingers form the group | Count all three contacts unless a contact is a detected palm. |
 | A configured threshold is zero, negative, nonnumeric, or nonfinite | Reject the value. Configuration recovery remains open under T11. |
-| All fingers lift during a drag | The grace period starts. |
-| Contact count changes from three to one, two, or more than three | The grace period starts. |
-| Exactly three fingers resume movement before expiry | The same drag continues without an intervening release. |
-| Three fingers return but remain stationary | Timer behavior remains open. |
+| Contact count first departs from three during dragging | Start the grace period, including when all fingers lift. |
+| Contacts change again during grace, including all remaining fingers lifting | Preserve the original deadline. |
+| Qualifying continuation movement occurs before expiry | Continue the same drag without an intervening release and cancel the timer. |
+| Three fingers return but remain stationary | Preserve the pause and deadline. |
+| Continuation displacement stays below the shared threshold | Preserve the pause and deadline. |
+| Contact identities change during grace while three contacts remain | Reset the continuation baseline without changing the deadline. |
+| Dragging resumes, then the contact count departs from three again | Start a new grace period from the new interruption. |
+| No grace duration is configured | Use 300 ms. |
+| Grace duration is zero, negative, nonnumeric, or nonfinite | Reject the value. Configuration recovery remains open under T11. |
 | The grace period expires | The drag ends. Later movement must satisfy RF-2 to start another drag. |
 | A valid ending tap completes during the grace period | The drag ends on finger lift, without an additional click. |
 | One drag finger remains and then lifts | No ending tap occurs. A fresh contact requires all valid contacts to lift first. |
@@ -200,11 +228,11 @@ Failure recovery remains an open question. Recovery must not resume the interrup
 | A detected palm appears beside the candidate | Ignore the palm without canceling the candidate. |
 | A candidate lasts longer than its duration limit | Cancel the candidate. Do not treat the later lift as an ending tap. |
 | The grace period expires while a candidate remains down | End the drag through expiry. Touchdown does not extend the deadline. |
-| Candidate lift coincides exactly with grace expiry | T03 must define event precedence. |
+| Candidate lift coincides exactly with grace expiry | Expiry wins. Release once without recognizing an ending tap. |
 | The pointer starts over an area without drag support | The application's ordinary behavior applies. |
 | A file drops over an invalid destination | The application determines the result. |
 | A failure prevents immediate release | The active drag ends. The utility releases the held drag action at the earliest opportunity. |
-| Movement coincides with grace-period expiry | Event precedence remains open. |
+| Movement coincides with grace-period expiry | Expiry wins. Release once without continuing the drag. |
 | A physical button or another pointing device acts during a drag | Interaction rules remain open. |
 
 ## Out of scope
@@ -234,13 +262,13 @@ Failure recovery remains an open question. Recovery must not resume the interrup
 
 ## Resolved decisions
 
+- **OQ-1 (T03):** Default to a configurable 300 ms grace period. Accept only finite numeric durations greater than zero.
 - **OQ-2 (T02):** Use a fresh one-finger tap, recognized on lift. RF-7 defines configurable 200 ms and 1 mm limits.
 - **OQ-3 (T01):** Use group displacement with a configurable 1 mm default. RF-2 defines contact validity, staggered placement, and baseline resets.
+- **OQ-4 (T03):** Preserve each grace deadline until continuation or termination. Require qualifying movement before expiry. Expiry wins exact-time ties.
 
 ## [OPEN QUESTIONS]
 
-- **OQ-1:** What is the grace-period duration? Can users change it?
-- **OQ-4:** Do three stationary fingers affect the grace timer? Can further contact changes restart it? What happens exactly at expiry?
 - **OQ-5:** After a failure, must users explicitly enable the feature again? Can availability recover automatically without resuming the interrupted drag?
 - **OQ-6:** How do users enable or disable the feature? What happens when they disable it during a drag?
 - **OQ-7:** What happens when users press a physical button or use another pointing device during a drag?

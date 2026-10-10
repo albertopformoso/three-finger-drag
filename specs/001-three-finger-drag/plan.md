@@ -16,13 +16,10 @@ The input backend remains provisional until its feasibility checks pass.
 | Decision | Required clarification | Coverage |
 | --- | --- | --- |
 | Pointer verification | Define numerical tolerances and response limits for T04's ordinary-pointing match. | RF-3, RF-6, OQ-9 |
-| Failure state | Distinguish a terminated gesture from a button release that remains pending. | RF-8, RF-9 |
 | Recovery | Define recovery, fresh-contact requirements, enablement, and disablement. | RF-2, RF-8, RF-9, OQ-5, OQ-6 |
 | External actions | Define physical buttons, other pointing devices, cancellation, and lifecycle interruptions. | RF-3, RF-7, RF-8, RF-9, OQ-7 |
 | Compatibility | Select touchpads, Hyprland versions, applications, window states, and the macOS reference. | RF-1, RF-4, OQ-8 |
 | Configuration | Define remaining settings and invalid-configuration behavior. T01 through T03 approve drag-start, ending-tap, and grace settings. | RF-1, RF-2, RF-5, RF-7, RF-9 |
-
-RF-9 cannot define failure completion solely through the existing held-button definition of an active drag.
 
 The specification must also address contact noise and contacts remaining after expiry.
 It must define outcomes for process exit, session lock, suspend, device changes, and target-window disappearance.
@@ -105,6 +102,25 @@ Coverage: RF-2, RF-3, RF-4, and RF-6.
 Stationary returns during grace still follow T03's fixed deadline and continuation threshold.
 T10 defines numerical tolerances and response-time limits. Backend feasibility must verify the ordinary-pointing match.
 
+### Approved T05 decisions
+
+Coverage: RF-8 and RF-9.
+
+- Failure immediately terminates the gesture, stops its movement, cancels its timers, and prevents its resumption.
+- Track pending button release separately from the terminated gesture.
+- Suppress input from the affected touchpad while cleanup remains pending. Discard suppressed input without later replay.
+- Leave other devices outside this restriction.
+- Complete cleanup after button release or desktop confirmation that the owning virtual device or session no longer exists.
+- Retain the obligation after unconfirmed loss. Never deliver an old release into a new session.
+- Restore ordinary pointing and scrolling after cleanup when touchpad access is available.
+- Restore ordinary input independently of new three-finger drag availability, which remains assigned to T06.
+- Report the failed operation, cause, pending-release status, and available recovery guidance in English.
+- Suppress repeated identical errors from unchanged cleanup failures.
+
+The backend must establish reliable evidence for release or owner disappearance.
+Kernel write acceptance alone does not prove desktop receipt. Missing confirmation keeps cleanup pending.
+T10 defines measurable cleanup response limits. T08 retains process and session lifecycle decisions.
+
 ## 2. Module structure
 
 Use one Go module with Go 1.27.1 or later, as required by the repository.
@@ -183,6 +199,10 @@ Before adopting this backend, verify these conditions:
 7. Device teardown and process failure do not leave a held drag action in Hyprland.
 8. Session loss and restoration cannot deliver stale movement or a delayed release into another session.
 
+Failure checks must verify suppression of the affected touchpad until release or confirmed owner disappearance.
+Prove that suppression survives recoverable access failures without capturing unrelated devices.
+Identify the evidence used to confirm cleanup. A disconnected control channel is not confirmation of owner disappearance.
+
 If these checks fail, revise the backend decision before implementation proceeds.
 Do not claim that the proxy already preserves every libinput behavior.
 The touchpad acceptance baseline must verify palm detection, thumb inclusion, and partial-multitouch hardware support.
@@ -201,9 +221,10 @@ Coverage: RF-1 through RF-9. Constitution principles 3 and 5.
 | Gesture policy | Shared start/continuation threshold, tap limits, grace duration, expiry precedence, ordinary-pointing motion values | T01 through T04 approve recognition, grace, and motion behavior. RF-2 through RF-7. |
 | Gesture state | Phase, valid contact identities, start baseline, continuation baseline, motion baseline, grace deadline, timer generation | Keep recognition baselines fixed for each contact group. No disk serialization. RF-2 through RF-7. |
 | Tap candidate | Contact identity, initial position, touchdown time, maximum displacement, cancellation state, all-contacts-lifted eligibility | Keep in memory. Reset after the required zero-contact state. RF-7. |
-| Output state | Desired button state, submitted button state, held output button, release pending, output-session identity | Map logical primary at the adapter boundary. Keep failed release separate. RF-2, RF-4, RF-7, RF-9. |
+| Output state | Desired button state, submitted button state, held output button, release pending, owning device and session identities, cleanup evidence | Keep cleanup separate and session-bound. Submission alone is not desktop confirmation. RF-2, RF-4, RF-7, RF-9. |
 | Effect | Hold button, move pointer, release button, schedule timer, cancel timer, route input | Abstract commands without native handles. RF-2 through RF-9. |
-| Availability | Enabled state, device access, output access, desktop availability | Determines readiness and failure handling. RF-1, RF-8, RF-9. |
+| Availability | Drag enablement, device access, output access, desktop availability, ordinary-input routing state | Restore ordinary input independently after cleanup. RF-1, RF-8, RF-9. |
+| Failure report state | Failed operation, cause, pending-release status, last reported error identity | Keep in memory. Suppress unchanged repeated errors without storing input events. RF-9. |
 | Explicit configuration | Schema version, drag-start threshold, ending-tap limits, and other approved user-selected settings | Only this record may persist. RF-1, RF-2, RF-5, RF-7, RF-9. |
 
 Use monotonic timestamps from one mapped clock domain.
@@ -212,7 +233,7 @@ Assign each timer a generation so canceled timers cannot affect later drags.
 
 Proposed phases are `ready`, `dragging`, `grace`, and `unavailable`.
 Keep pending output cleanup in a separate record.
-This separation is a technical proposal pending the RF-9 specification correction.
+T05 requires this separation. A terminated gesture may remain unavailable for new drags while ordinary input resumes after cleanup.
 
 ### JSON example
 
@@ -324,19 +345,20 @@ Coverage: RF-2 through RF-9.
 
 Coverage: RF-2, RF-3, RF-4, RF-8.
 
-1. If the feature is not ready, apply the approved unavailable-state routing policy.
-2. Exclude detected palms and include thumbs when forming the valid contact set.
-3. If the valid contact count or identities change, discard the previous start baseline.
-4. If the count differs from three, preserve permitted ordinary input and wait for exactly three valid contacts.
-5. If no start baseline exists, store the three contact identities and their average position in millimeters.
-6. On subsequent frames, calculate the current average position for the same three contacts.
-7. Calculate the straight-line distance from the fixed start baseline. Do not sum frame-to-frame distances.
-8. If displacement is below the configured threshold, generate no drag.
-9. If displacement reaches or exceeds the threshold, claim the gesture through the verified routing procedure.
-10. Submit a logical primary-button hold through the desktop mapping at the current pointer position.
-11. If submission fails, enter the failure procedure.
-12. Establish the motion baseline at the threshold-crossing event's group position and enter the dragging phase.
-13. Discard all movement through that event. Emit movement only for subsequent group changes.
+1. If release remains pending, discard affected-touchpad input without gesture recognition or ordinary forwarding.
+2. Otherwise, require drag readiness before recognition. Use RF-8 for ordinary routing and T06 for new-drag availability.
+3. Exclude detected palms and include thumbs when forming the valid contact set.
+4. If the valid contact count or identities change, discard the previous start baseline.
+5. If the count differs from three, preserve permitted ordinary input and wait for exactly three valid contacts.
+6. If no start baseline exists, store the three contact identities and their average position in millimeters.
+7. On subsequent frames, calculate the current average position for the same three contacts.
+8. Calculate the straight-line distance from the fixed start baseline. Do not sum frame-to-frame distances.
+9. If displacement is below the configured threshold, generate no drag.
+10. If displacement reaches or exceeds the threshold, claim the gesture through the verified routing procedure.
+11. Submit a logical primary-button hold through the desktop mapping at the current pointer position.
+12. If submission fails, enter the failure procedure.
+13. Establish the motion baseline at the threshold-crossing event's group position and enter the dragging phase.
+14. Discard all movement through that event. Emit movement only for subsequent group changes.
 
 ### Move and pause
 
@@ -411,15 +433,21 @@ Coverage: RF-7, RF-8.
 Coverage: RF-9, with RF-8 interaction.
 
 1. Mark the current gesture terminated and reject its future movement effects.
-2. Cancel its timer generation and discard queued movement.
-3. Mark any held or uncertain button state for release.
-4. If the current output session permits release, submit the release immediately.
-5. Otherwise, retain only the in-memory cleanup obligation.
-6. When release becomes possible, apply the approved session-specific cleanup rule.
-7. Report the failed operation, cause, and available guidance without input-event details.
-8. Apply the approved recovery policy without resuming the interrupted drag.
+2. Cancel its timers, clear its tap candidate, and discard queued movement.
+3. Track any held or uncertain button state as an in-memory cleanup obligation with its owning device and session identities.
+4. While release remains pending, suppress affected-touchpad input. Discard it without buffering for later replay.
+5. Leave other devices outside the suppression rule.
+6. If release is possible in the owning session, submit it immediately.
+7. Complete cleanup only after release or desktop confirmation that the owning virtual device or session no longer exists.
+8. If loss remains unconfirmed, retain the obligation and suppression. Do not infer success from connection loss.
+9. When another release opportunity occurs, verify the owning session before retrying. Never redirect cleanup into a new session.
+10. Report the operation, cause, pending-release status, and available guidance in English, without input-event details.
+11. Suppress repeated copies of the same unchanged error during cleanup retries.
+12. After cleanup, restore ordinary input when touchpad access is available, independently of new-drag readiness.
+13. Apply T06's future recovery policy for new drags. Never resume the terminated gesture.
 
-The specification must decide ordinary-input routing while cleanup remains pending.
+Retain only cleanup and error-deduplication metadata. Do not persist it or retain suppressed input events.
+The adapter supplies cleanup evidence to the runtime. Gesture logic must not query the desktop.
 No process can execute cleanup after an uncatchable termination.
 Kernel device teardown and compositor behavior therefore require direct failure tests.
 
@@ -484,7 +512,7 @@ Assert observable effect sequences and state invariants rather than private impl
 | RF-6 | Continuation cancels stale deadlines, preserves the hold, and rejects repositioning displacement. |
 | RF-7 | Verify fresh-contact eligibility, inclusive tap limits, cancellation, configuration, and recognition on lift. Expiry and ending taps release once. |
 | RF-8 | Ordinary input routes only under the approved ownership rules. Competing three-finger output remains suppressed. |
-| RF-9 | Failures cancel motion and timers. Pending releases survive recoverable output failure without resuming the drag. |
+| RF-9 | Failures terminate gestures. Cleanup requires release or confirmed owner disappearance. Reject cross-session releases and deduplicate repeated errors. |
 
 Test before, at, and after every approved timing boundary.
 Test repeated contact changes, stationary contacts, delayed events, and contacts remaining after release.
@@ -595,6 +623,32 @@ Use deterministic effect tests for threshold, baseline, and stationary-contact r
 Use desktop comparisons for sensitivity, acceleration, and button mapping. A successful output write alone cannot prove these behaviors.
 Document comparison trajectories and aggregate results without saving input recordings.
 
+### T05 acceptance scenarios
+
+Coverage: RF-8 and RF-9. These scenarios define future tests, not executed implementation tests.
+
+| Scenario | Expected result |
+| --- | --- |
+| Failure occurs during dragging or grace | Terminate the gesture immediately. Stop movement, cancel timers, and discard queued movement. |
+| Release remains possible after failure | Release immediately in the owning session. Complete cleanup after release. |
+| Release is temporarily unavailable | Keep a separate pending release and suppress affected-touchpad input. |
+| Contacts move, scroll, or tap during cleanup | Discard their input. Do not replay it after cleanup. |
+| Another input device produces events during cleanup | This touchpad suppression rule does not capture or suppress those events. |
+| Contacts satisfy continuation after failure | Do not resume the terminated gesture. |
+| A canceled gesture timer arrives after failure | Ignore it without producing movement or another gesture action. |
+| The control connection disappears without owner confirmation | Keep cleanup pending. Do not infer button release. |
+| The desktop confirms destruction of the owning virtual device | Complete cleanup without requiring release into another device. |
+| The desktop confirms the owning session no longer exists | Complete cleanup without sending an old release into the new session. |
+| A new session appears without confirmation of the old owner's disappearance | Retain pending cleanup. Never send the old release to the new session. |
+| Release becomes possible again in the owning session | Attempt release at the earliest opportunity. Complete cleanup after release. |
+| Cleanup completes while touchpad access is available | Restore ordinary pointing and scrolling independently of three-finger drag availability. |
+| Cleanup completes before touchpad access returns | Restore ordinary input when access becomes available. |
+| Cleanup retries encounter the same unchanged failure | Report operation, cause, pending status, and available guidance once rather than on every retry. |
+
+Use deterministic runtime tests for routing, canceled effects, and error deduplication.
+Use adapter integration tests to verify release evidence and confirmation of device or session disappearance.
+Check that successful submission alone cannot clear an obligation without the verified release contract.
+
 ### Adapter integration tests
 
 Coverage: RF-1 through RF-9.
@@ -627,7 +681,7 @@ Include each approved window state and application type.
 | RF-5 | Every specified contact-count change pauses movement while retaining the drag. |
 | RF-6 | Repositioning continues the same drag without a pointer jump. |
 | RF-7 | Expiry and taps end the drag without an additional click. |
-| RF-8 | Ordinary pointing and scrolling remain available outside a drag. Competing actions do not occur. |
+| RF-8 | Ordinary input works outside active drags and pending cleanup. Cleanup suppresses only the affected touchpad without replay. |
 | RF-9 | Disconnection, permission loss, and desktop loss terminate the gesture and satisfy the approved release policy. |
 
 Compare the same authored interaction scripts with the selected macOS reference.

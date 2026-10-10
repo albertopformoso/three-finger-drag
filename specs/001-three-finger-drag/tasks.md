@@ -31,7 +31,7 @@ These tasks capture user decisions. They do not select new behavior without appr
 | Task | Description | RF coverage | Time | Depends on | Completion criteria | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | T01 | Define contact recognition and drag-start thresholds. | RF-2, RF-3 | 25 min | None | Made when: Approved criteria cover contact validity, staggered placement, stationary fingers, and required finger movement. Evidence: [T01 decisions](#t01-completion-evidence). | done |
-| T02 | Define the ending tap. | RF-7 | 20 min | T01 | Made when: Approved criteria specify finger count, duration, movement tolerance, recognition time, and tap consumption. | - |
+| T02 | Define the ending tap. | RF-7 | 20 min | T01 | Made when: Approved criteria specify finger count, duration, movement tolerance, recognition time, and tap consumption. Evidence: [T02 decisions](#t02-completion-evidence). | done |
 | T03 | Define grace timing and event precedence. | RF-5, RF-6, RF-7 | 25 min | T02 | Made when: Approved criteria cover duration, timer restarts, stationary returns, repeated changes, and events exactly at expiry. | - |
 | T04 | Define motion and primary-button behavior. | RF-2, RF-3, RF-4, RF-6 | 25 min | T01 | Made when: Approved criteria define initial movement, direction, scaling, acceleration, repositioning, and left-handed button behavior. | - |
 | T05 | Define failed-drag termination and pending release. | RF-8, RF-9 | 25 min | T03 | Made when: Approved terms distinguish terminated gestures from pending releases and define ordinary-input routing during cleanup. | - |
@@ -58,6 +58,24 @@ The user approved these decisions in the T01 clarification discussion:
 
 Evidence: [RF-2 and RF-3](spec.md#rf-2-start-a-drag), [resolved OQ-3](spec.md#resolved-decisions), and [plan decisions](plan.md#approved-t01-decisions).
 The [T01 acceptance scenarios](plan.md#t01-acceptance-scenarios) define future verification. T01 completes specification decisions, not implementation testing.
+
+### T02 completion evidence
+
+The user approved these decisions in the T02 clarification discussion:
+
+- Require a fresh one-finger tap after all valid contacts lift. Include thumbs and ignore detected palms.
+- Recognize the tap on finger lift within 200 ms, including exactly 200 ms.
+- Keep displacement within 1 mm of the initial contact position throughout contact. Exactly 1 mm qualifies.
+- Cancel the candidate when either limit is exceeded or a second valid contact appears.
+- After cancellation, require all valid contacts to lift before another attempt.
+- Configure duration and displacement independently from the drag-start threshold.
+- Accept only finite numeric values greater than zero for both limits.
+- Require touchdown and lift before grace expiry. Touchdown does not extend the grace period.
+- Consume the recognized tap and release the drag without an additional click, as RF-7 requires.
+
+Evidence: [RF-7 recognition](spec.md#ending-tap-recognition), [resolved OQ-2](spec.md#resolved-decisions), and [plan decisions](plan.md#approved-t02-decisions).
+The [T02 acceptance scenarios](plan.md#t02-acceptance-scenarios) define future verification. T02 completes specification decisions, not implementation testing.
+T03 retains the decision about finger lift exactly at grace expiry.
 
 ## 2. Establish backend feasibility
 

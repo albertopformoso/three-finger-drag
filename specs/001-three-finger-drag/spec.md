@@ -31,7 +31,9 @@ The team must resolve timing details and compare observable behavior with macOS 
 - **Ready:** The feature is enabled, its required access is available, and no drag is active.
 - **Active drag:** The utility holds the drag action, including during the grace period.
 - **Grace period:** A bounded interval that keeps the drag held and pauses gesture-driven pointer movement.
-- **Ending tap:** A tap during the grace period that ends the drag. Its recognition rules remain open.
+- **Ending tap:** A fresh one-finger tap that satisfies RF-7 during the grace period. Recognition occurs on finger lift.
+- **Tap candidate:** A fresh single valid contact after all valid contacts have lifted during the drag's grace period.
+- **Tap displacement:** The straight-line distance from the candidate's initial contact position, measured in touchpad millimeters.
 - **Supported environment:** Arch Linux or CachyOS with Hyprland on Wayland and a compatible touchpad.
 - **Drag failure:** Touchpad disconnection, missing or revoked permissions, or loss of the desktop connection.
 - **Valid contact:** A finger contact, including a thumb, that is not a detected palm. Contact counts refer to valid contacts.
@@ -112,6 +114,35 @@ Contact changes within an existing grace period have unresolved timer rules.
 - WHEN an ending tap occurs, the utility SHALL consume the tap without generating an additional click.
 - WHEN the utility releases the drag action, the utility SHALL end the active drag.
 
+#### Ending-tap recognition
+
+- WHILE the grace period is active, WHEN contacts change from zero to one, the utility SHALL start a tap candidate.
+- WHEN evaluating a tap candidate, the utility SHALL include thumbs and ignore detected palms.
+- WHILE a tap candidate remains down, the utility SHALL defer ending-tap recognition until that contact lifts.
+- WHEN evaluating tap duration, the utility SHALL measure elapsed time from the candidate's touchdown to its lift.
+- WHEN evaluating tap movement, the utility SHALL use the maximum tap displacement throughout the candidate's contact.
+- IF tap duration exceeds its configured limit, THEN the utility SHALL cancel the tap candidate.
+- IF tap displacement exceeds its configured limit, THEN the utility SHALL cancel the tap candidate.
+- WHEN a second valid contact appears, the utility SHALL cancel the tap candidate.
+- WHEN a candidate is canceled, the utility SHALL require zero valid contacts before accepting another tap candidate.
+- WHEN an uncanceled candidate lifts within both limits before grace expiry, the utility SHALL recognize an ending tap.
+- WHEN evaluating either tap limit, the utility SHALL accept equality with that limit.
+- WHEN a tap candidate touches down, the utility SHALL preserve the existing grace-period deadline.
+- IF grace expiry precedes candidate lift, THEN the utility SHALL end the drag through expiry without recognizing an ending tap.
+- WHERE no ending-tap duration limit is configured, the utility SHALL use 200 ms.
+- WHERE no ending-tap movement limit is configured, the utility SHALL use 1 mm.
+- WHEN reading configuration, the utility SHALL accept independent ending-tap duration and movement limits as finite numbers greater than zero.
+- IF either configured limit is zero, negative, nonnumeric, or nonfinite, THEN the utility SHALL reject that value.
+
+Both touchdown and lift must occur during the grace period, before its expiry.
+A remaining drag finger cannot become a tap candidate without first lifting.
+Exceeding a movement limit cancels the candidate even if the finger returns to its initial position.
+Canceling a candidate does not itself end the drag. The existing drag and grace-period rules still apply.
+Duration uses milliseconds. Movement uses millimeters and remains independent of the drag-start threshold.
+The defaults require comparison with macOS before an equivalence claim.
+T03 defines precedence when candidate lift coincides exactly with grace expiry.
+T11 defines invalid-configuration recovery and changes to configuration during a drag.
+
 The application determines the result of the release. A release does not guarantee that a file drop succeeds.
 
 ### RF-8: Preserve ordinary gestures
@@ -160,7 +191,16 @@ Failure recovery remains an open question. Recovery must not resume the interrup
 | Exactly three fingers resume movement before expiry | The same drag continues without an intervening release. |
 | Three fingers return but remain stationary | Timer behavior remains open. |
 | The grace period expires | The drag ends. Later movement must satisfy RF-2 to start another drag. |
-| The user taps during the grace period | The drag ends immediately, without an additional click. |
+| A valid ending tap completes during the grace period | The drag ends on finger lift, without an additional click. |
+| One drag finger remains and then lifts | No ending tap occurs. A fresh contact requires all valid contacts to lift first. |
+| A candidate lasts exactly 200 ms with default limits | Accept its duration if it lifts before grace expiry. |
+| A candidate reaches exactly 1 mm with default limits | Accept its movement if displacement never exceeds 1 mm. |
+| A candidate exceeds 1 mm and returns with default limits | Cancel the candidate. Returning does not restore it. |
+| A second valid contact appears and then lifts | Cancel the candidate. Require all valid contacts to lift before another attempt. |
+| A detected palm appears beside the candidate | Ignore the palm without canceling the candidate. |
+| A candidate lasts longer than its duration limit | Cancel the candidate. Do not treat the later lift as an ending tap. |
+| The grace period expires while a candidate remains down | End the drag through expiry. Touchdown does not extend the deadline. |
+| Candidate lift coincides exactly with grace expiry | T03 must define event precedence. |
 | The pointer starts over an area without drag support | The application's ordinary behavior applies. |
 | A file drops over an invalid destination | The application determines the result. |
 | A failure prevents immediate release | The active drag ends. The utility releases the held drag action at the earliest opportunity. |
@@ -194,12 +234,12 @@ Failure recovery remains an open question. Recovery must not resume the interrup
 
 ## Resolved decisions
 
+- **OQ-2 (T02):** Use a fresh one-finger tap, recognized on lift. RF-7 defines configurable 200 ms and 1 mm limits.
 - **OQ-3 (T01):** Use group displacement with a configurable 1 mm default. RF-2 defines contact validity, staggered placement, and baseline resets.
 
 ## [OPEN QUESTIONS]
 
 - **OQ-1:** What is the grace-period duration? Can users change it?
-- **OQ-2:** What finger count, duration, and movement tolerance define an ending tap?
 - **OQ-4:** Do three stationary fingers affect the grace timer? Can further contact changes restart it? What happens exactly at expiry?
 - **OQ-5:** After a failure, must users explicitly enable the feature again? Can availability recover automatically without resuming the interrupted drag?
 - **OQ-6:** How do users enable or disable the feature? What happens when they disable it during a drag?

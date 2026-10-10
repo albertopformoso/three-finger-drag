@@ -44,6 +44,8 @@ The team must resolve timing details and compare observable behavior with macOS 
 - **Grace deadline:** The time of the first contact-count departure from three during dragging, plus the configured grace duration.
 - **Continuation baseline:** The group position when exactly three valid contacts form the current group during the grace period.
 - **Qualifying continuation movement:** Displacement from the continuation baseline that reaches the drag-start threshold while the same three valid contacts remain.
+- **Logical primary button:** The desktop button action for ordinary selection and dragging, including the desktop's left-handed mapping.
+- **Motion baseline:** The group position used to measure subsequent relative pointer movement during dragging.
 
 Each requirement has acceptance criteria in EARS notation.
 The words WHERE, WHILE, WHEN, IF, THEN, and SHALL identify conditions and required responses.
@@ -58,6 +60,9 @@ Acceptance checks must cover both distributions. Compatible touchpads remain an 
 
 - WHILE ready, WHEN qualifying start movement occurs, the utility SHALL start a drag at the current pointer position.
 - WHEN a three-finger drag starts, the utility SHALL require no physical touchpad press.
+- WHEN a drag starts, the utility SHALL hold the desktop's logical primary button, respecting left-handed mode.
+- WHEN start movement reaches the threshold, the utility SHALL discard movement through the threshold-crossing event without moving the pointer.
+- WHEN a drag starts, the utility SHALL establish the motion baseline at the current group position.
 - WHILE ready, WHEN three fingers remain stationary, the utility SHALL generate neither a click nor a drag.
 - WHILE ready, WHEN the contact count differs from three, the utility SHALL refrain from starting a three-finger drag.
 - WHEN counting contacts, the utility SHALL exclude detected palms and include thumbs.
@@ -79,10 +84,23 @@ Invalid-configuration recovery remains open under T11. RF-6 uses this same thres
 
 ### RF-3: Move during a drag
 
-- WHILE dragging with three valid contacts, WHEN their group position moves, the utility SHALL move the pointer with that movement.
+- WHILE dragging with the same three contacts, WHEN subsequent group movement occurs, the utility SHALL move the pointer with it.
 - WHILE dragging with three valid contacts, WHEN their group position moves, the utility SHALL keep the drag action held.
+- WHILE dragging, the utility SHALL match ordinary one-finger pointing direction, sensitivity, and acceleration on the same touchpad.
+- WHEN the group moves rightward, the utility SHALL move the pointer rightward.
+- WHEN the group moves upward, the utility SHALL move the pointer upward.
+- WHILE dragging, the utility SHALL ignore natural-scrolling direction settings for pointer movement.
+- WHEN contact identities change while dragging with three contacts, the utility SHALL reset the motion baseline without moving the pointer.
+- WHEN that baseline resets, the utility SHALL keep the drag held and use only subsequent group movement.
+- WHILE three contacts remain stationary outside grace, the utility SHALL keep the drag held without a stationary-contact timeout.
+- WHILE those contacts remain stationary, the utility SHALL stop gesture-driven pointer movement without starting a grace timer.
 
 Individual fingers may remain stationary. RF-5 and RF-6 govern paused movement and continuation during the grace period.
+Contact replacement while the count stays three does not require another displacement threshold or start a grace period.
+If the count departs from three, RF-5 applies instead.
+The pointer has no continued gesture-driven motion after the fingers stop.
+Matching sensitivity and acceleration means matching the response to equivalent displacement and speed during ordinary one-finger pointing.
+T10 defines numerical comparison tolerances and response-time limits.
 
 ### RF-4: Drag files, select text, and move windows
 
@@ -92,6 +110,7 @@ Individual fingers may remain stationary. RF-5 and RF-6 govern paused movement a
 
 The application controls valid drop destinations and the result of a file drop.
 The gesture starts at the current pointer position, not the fingers' absolute touchpad position.
+All three operations use the logical primary-button action, rather than a fixed physical left-button action.
 
 ### RF-5: Pause a drag
 
@@ -120,6 +139,8 @@ The default requires comparison with macOS. T11 defines invalid-configuration re
 - WHEN a drag continues, the utility SHALL cancel the current grace period.
 - WHEN a drag continues, the utility SHALL keep the drag action held without an intervening release.
 - WHEN repositioned fingers resume movement, the utility SHALL prevent a pointer jump caused solely by their new contact positions.
+- WHEN continuation qualifies, the utility SHALL discard movement through the threshold-crossing event and retain the current pointer position.
+- WHEN continuation qualifies, the utility SHALL reset the motion baseline and use only subsequent group movement for pointer motion.
 
 Continuation uses straight-line displacement of the group's average position in touchpad millimeters, not accumulated traveled distance.
 Individual fingers may remain stationary. The shared threshold defaults to 1 mm and follows the drag-start configuration.
@@ -204,6 +225,11 @@ Failure recovery remains an open question. Recovery must not resume the interrup
 | Movement occurs before the third valid contact arrives | Exclude that movement from group displacement. |
 | One finger moves while two remain stationary | Start when their average position reaches the configured displacement threshold. |
 | Group displacement equals the threshold | Start the drag. |
+| A movement event crosses the start or continuation threshold | Discard all movement through that event. Move only on subsequent group movement. |
+| Left-handed mode swaps physical buttons | Hold the logical primary button for normal selection and dragging. |
+| Natural-scrolling direction changes | Preserve ordinary pointer direction. |
+| Contact identities change during dragging while the count stays three | Keep the hold, reset the motion baseline, and discard replacement displacement. |
+| Three contacts stop moving outside grace | Stop pointer movement. Keep the drag held indefinitely without starting a grace timer. |
 | Back-and-forth movement stays below the threshold | No drag starts, regardless of total distance traveled. |
 | Valid contact count or identities change before drag start | Discard the baseline. Establish a new baseline when exactly three valid contacts remain. |
 | A detected palm touches beside three valid contacts | Exclude the palm. Keep the existing baseline. |
@@ -266,6 +292,7 @@ Failure recovery remains an open question. Recovery must not resume the interrup
 - **OQ-2 (T02):** Use a fresh one-finger tap, recognized on lift. RF-7 defines configurable 200 ms and 1 mm limits.
 - **OQ-3 (T01):** Use group displacement with a configurable 1 mm default. RF-2 defines contact validity, staggered placement, and baseline resets.
 - **OQ-4 (T03):** Preserve each grace deadline until continuation or termination. Require qualifying movement before expiry. Expiry wins exact-time ties.
+- **T04:** Match ordinary pointing and the logical primary button. Discard threshold-crossing movement and reset motion baselines after contact replacement.
 
 ## [OPEN QUESTIONS]
 
@@ -273,4 +300,4 @@ Failure recovery remains an open question. Recovery must not resume the interrup
 - **OQ-6:** How do users enable or disable the feature? What happens when they disable it during a drag?
 - **OQ-7:** What happens when users press a physical button or use another pointing device during a drag?
 - **OQ-8:** Which touchpads, applications, and macOS reference behavior define the acceptance baseline?
-- **OQ-9:** What response-time limits and pointer-motion criteria define acceptable behavior?
+- **OQ-9:** What response-time limits and numerical tolerances verify the approved ordinary-pointing match?

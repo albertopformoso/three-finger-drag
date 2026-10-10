@@ -33,7 +33,7 @@ These tasks capture user decisions. They do not select new behavior without appr
 | T01 | Define contact recognition and drag-start thresholds. | RF-2, RF-3 | 25 min | None | Made when: Approved criteria cover contact validity, staggered placement, stationary fingers, and required finger movement. Evidence: [T01 decisions](#t01-completion-evidence). | done |
 | T02 | Define the ending tap. | RF-7 | 20 min | T01 | Made when: Approved criteria specify finger count, duration, movement tolerance, recognition time, and tap consumption. Evidence: [T02 decisions](#t02-completion-evidence). | done |
 | T03 | Define grace timing and event precedence. | RF-5, RF-6, RF-7 | 25 min | T02 | Made when: Approved criteria cover duration, timer restarts, stationary returns, repeated changes, and events exactly at expiry. Evidence: [T03 decisions](#t03-completion-evidence). | done |
-| T04 | Define motion and primary-button behavior. | RF-2, RF-3, RF-4, RF-6 | 25 min | T01 | Made when: Approved criteria define initial movement, direction, scaling, acceleration, repositioning, and left-handed button behavior. | - |
+| T04 | Define motion and primary-button behavior. | RF-2, RF-3, RF-4, RF-6 | 25 min | T01 | Made when: Approved criteria define initial movement, direction, scaling, acceleration, repositioning, and left-handed button behavior. Evidence: [T04 decisions](#t04-completion-evidence). | done |
 | T05 | Define failed-drag termination and pending release. | RF-8, RF-9 | 25 min | T03 | Made when: Approved terms distinguish terminated gestures from pending releases and define ordinary-input routing during cleanup. | - |
 | T06 | Define enablement, recovery, and rearming. | RF-2, RF-7, RF-8, RF-9 | 25 min | T05 | Made when: Approved criteria cover startup, disablement, recovery, fresh contacts, and contacts remaining after expiry. | - |
 | T07 | Define physical-button and other-device interactions. | RF-3, RF-7, RF-8, RF-9 | 25 min | T04, T06 | Made when: Approved criteria cover physical buttons, other pointers, multiple touchpads, duplicate instances, and explicit cancellation. | - |
@@ -95,6 +95,24 @@ The user approved these decisions in the T03 clarification discussion:
 Evidence: [RF-5 and RF-6](spec.md#rf-5-pause-a-drag), [RF-7](spec.md#rf-7-end-a-drag), and [plan decisions](plan.md#approved-t03-decisions).
 [Resolved OQ-1 and OQ-4](spec.md#resolved-decisions) capture duration and precedence decisions.
 The [T03 acceptance scenarios](plan.md#t03-acceptance-scenarios) define future verification. T03 completes specification decisions, not implementation testing.
+
+### T04 completion evidence
+
+The user approved these decisions in the T04 clarification discussion:
+
+- Start or resume at the current pointer position. Discard movement through the threshold-crossing event.
+- Move only with subsequent group movement.
+- Match ordinary one-finger pointing direction, sensitivity, and acceleration on the same touchpad.
+- Ignore natural-scrolling direction for pointer movement.
+- Hold the logical primary button, respecting left-handed mode.
+- If contact identities change while the count stays three, keep the hold and reset the motion baseline.
+- Exclude replacement and repositioning displacement. Use only subsequent movement after the reset.
+- Outside grace, stationary three-contact dragging retains the hold indefinitely and produces no continued pointer motion.
+- Stationary active-drag contacts do not start a grace timer. Stationary returns during grace still follow T03.
+
+Evidence: [RF-2](spec.md#rf-2-start-a-drag), [RF-3](spec.md#rf-3-move-during-a-drag), [RF-4](spec.md#rf-4-drag-files-select-text-and-move-windows), and [RF-6](spec.md#rf-6-continue-a-drag).
+The [plan decisions](plan.md#approved-t04-decisions) and [T04 acceptance scenarios](plan.md#t04-acceptance-scenarios) define future verification.
+T04 completes specification decisions, not implementation testing. T10 retains numerical tolerances and response-time limits.
 
 ## 2. Establish backend feasibility
 

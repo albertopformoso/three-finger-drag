@@ -28,7 +28,9 @@ The team must resolve timing details and compare observable behavior with macOS 
 
 ### Terms
 
-- **Ready:** The feature is enabled, required access is available, and neither an active drag nor pending release exists.
+- **Enabled:** Three-finger dragging is requested by the startup configuration or the latest runtime enable command. Readiness remains a separate condition.
+- **Armed:** The utility has observed zero valid contacts after the applicable startup, enablement, recovery, or completion checks.
+- **Ready:** The feature is enabled and armed, required access is available, and neither an active drag nor pending release exists.
 - **Active drag:** A gesture in dragging or grace that has not terminated. Failure terminates it even if button release remains pending.
 - **Terminated gesture:** A gesture that cannot produce further drag movement or resume. Its output cleanup may remain pending.
 - **Pending release:** An unresolved cleanup obligation for the terminated gesture's held button, separate from gesture state.
@@ -84,6 +86,25 @@ The threshold applies in every direction and measures touchpad distance, not scr
 Detected palms do not change the valid contact count, group position, or baseline.
 The 1 mm default requires comparison with macOS before any equivalence claim.
 Invalid-configuration recovery remains open under T11. RF-6 uses this same threshold for continuation.
+
+#### Enablement and rearming
+
+- WHERE no startup enablement setting is configured, the utility SHALL request enabled operation at startup.
+- WHERE startup configuration requests disabled operation, the utility SHALL start with three-finger dragging disabled.
+- WHEN startup, enablement, or recovery occurs, the utility SHALL require available access and completed cleanup before arming.
+- WHEN those prerequisites hold and zero valid contacts are observed, the utility SHALL arm recognition for fresh contacts.
+- WHILE awaiting zero valid contacts, the utility SHALL prevent existing contacts from starting a drag.
+- WHEN a new drag starts, the utility SHALL consume the current armed state.
+- WHEN a drag completes normally, the utility SHALL require zero valid contacts before arming another drag.
+- WHERE zero valid contacts remain at normal completion, the utility SHALL treat the zero-contact requirement as satisfied.
+- WHEN the user requests enablement, the utility SHALL apply the request while running and perform the readiness checks.
+- WHEN the user requests disablement, the utility SHALL disable new three-finger drags while running.
+- WHILE running, the utility SHALL provide explicit enable and disable commands.
+- WHEN an enable or disable command changes state, the utility SHALL retain that override only until restart.
+- WHEN the utility restarts, the utility SHALL determine startup enablement from configuration rather than the previous runtime override.
+
+Arming permits subsequent fresh contacts to form a gesture. Readiness does not require zero contacts throughout recognition.
+Runtime enable and disable commands do not rewrite startup configuration.
 
 ### RF-3: Move during a drag
 
@@ -158,8 +179,12 @@ Contact changes reset the continuation baseline without changing the deadline. D
 - WHEN movement coincides exactly with the grace deadline, the utility SHALL process expiry before evaluating continuation.
 - WHEN candidate lift coincides exactly with the grace deadline, the utility SHALL end through expiry without recognizing an ending tap.
 - WHEN expiry coincides with movement or candidate lift, the utility SHALL release the held drag action only once.
+- WHEN disablement occurs during dragging or grace, the utility SHALL immediately terminate the gesture and stop its movement.
+- WHEN disablement terminates a gesture, the utility SHALL cancel its timers and release the held button without waiting for grace expiry.
+- IF release fails during disablement, THEN the utility SHALL apply RF-9's pending-cleanup rules.
 
 Movement at or after the deadline cannot continue the expired drag.
+Contacts remaining after normal completion cannot start another drag until all valid contacts lift.
 
 #### Ending-tap recognition
 
@@ -200,6 +225,8 @@ The application determines the result of the release. A release does not guarant
 - WHILE suppressing the affected touchpad, the utility SHALL leave other devices outside that restriction.
 - WHEN cleanup completes and touchpad access is available, the utility SHALL restore ordinary one-finger pointing and two-finger scrolling.
 - WHEN ordinary input returns after cleanup, the utility SHALL restore it independently of three-finger drag availability.
+- WHILE awaiting fresh contacts after cleanup, the utility SHALL preserve ordinary pointing and scrolling when access is available.
+- WHILE disabled with cleanup complete, the utility SHALL stop reserving three-finger gestures and allow normal desktop gesture behavior.
 - WHILE the feature is enabled, the utility SHALL reserve three-finger gestures for this feature.
 - WHILE the feature is enabled, the utility SHALL prevent its three-finger gestures from also triggering competing desktop actions.
 
@@ -218,12 +245,17 @@ The application determines the result of the release. A release does not guarant
 - WHEN a drag failure occurs, the utility SHALL report an English error identifying the failed operation, cause, and pending-release status.
 - WHERE recovery guidance is available, the utility SHALL include it in the failure error.
 - WHEN cleanup attempts repeat without a changed failure, the utility SHALL suppress repeated copies of the same error.
+- WHEN failure occurs, the utility SHALL clear armed recognition and preserve the user's requested enablement state.
+- WHEN access returns and cleanup completes, the utility SHALL automatically prepare enabled dragging for fresh contacts.
+- WHILE the user has explicitly disabled dragging, the utility SHALL prevent automatic recovery from enabling it.
+- WHEN recovery prerequisites hold, the utility SHALL require an observed zero-contact state before arming a new gesture.
 
 Ending a failed drag does not undo actions that an application already completed.
 Failure termination and output cleanup are separate outcomes. Unconfirmed loss is not proof that a held button no longer exists.
 Pending cleanup keeps the affected touchpad suppressed even though the gesture has terminated.
 After cleanup, restore ordinary input as soon as touchpad access permits it.
-T06 defines availability of new three-finger drags. It cannot permit resumption of the terminated gesture.
+Automatic recovery requires enabled operation, available access, completed cleanup, and zero valid contacts before a new gesture.
+It never resumes a terminated gesture. Ordinary input restoration remains independent of drag readiness.
 
 ## Non-functional requirements
 
@@ -265,7 +297,15 @@ T06 defines availability of new three-finger drags. It cannot permit resumption 
 | Dragging resumes, then the contact count departs from three again | Start a new grace period from the new interruption. |
 | No grace duration is configured | Use 300 ms. |
 | Grace duration is zero, negative, nonnumeric, or nonfinite | Reject the value. Configuration recovery remains open under T11. |
-| The grace period expires | The drag ends. Later movement must satisfy RF-2 to start another drag. |
+| Grace expires with contacts remaining | End the drag. Require all valid contacts to lift before a new RF-2 gesture. |
+| A drag completes with zero valid contacts | The zero-contact requirement is already satisfied for the next gesture. |
+| Startup or enablement occurs with contacts already down | Wait for access, cleanup, and zero valid contacts before arming. |
+| Failure clears while enabled, with cleanup complete and access available | Automatically arm after observing zero valid contacts. Never resume the failed gesture. |
+| Failure clears while explicitly disabled | Keep dragging disabled. Restore ordinary input when cleanup and access permit. |
+| Disablement occurs during dragging or grace | End immediately, cancel timers, and release. Use pending cleanup if release fails. |
+| Disablement occurs while release remains pending | Keep the touchpad suppressed until cleanup completes. Disablement does not bypass cleanup. |
+| Dragging is disabled and cleanup is complete | Allow the desktop's normal three-finger gestures. |
+| A runtime override differs from startup configuration | Keep the override until restart, then use startup configuration. |
 | A valid ending tap completes during the grace period | The drag ends on finger lift, without an additional click. |
 | One drag finger remains and then lifts | No ending tap occurs. A fresh contact requires all valid contacts to lift first. |
 | A candidate lasts exactly 200 ms with default limits | Accept its duration if it lifts before grace expiry. |
@@ -305,6 +345,7 @@ T06 defines availability of new three-finger drags. It cannot permit resumption 
 - Every functional acceptance criterion passes on both supported distributions.
 - Agreed representative applications support file dragging, text selection, and title-bar window movement in acceptance checks.
 - Tests cover drag start, finger-count changes, continuation, tap-to-end, and grace-period expiry.
+- Tests cover startup state, runtime overrides, immediate disablement, automatic recovery, and fresh-contact rearming.
 - Failure checks confirm immediate gesture termination and separate cleanup through release or confirmed owner disappearance.
 - Cleanup checks verify touchpad suppression, discarded input, session-bound releases, and error reporting without repeated identical errors.
 - Ordinary pointing and scrolling work outside active drags and pending cleanup when touchpad access is available.
@@ -321,13 +362,13 @@ T06 defines availability of new three-finger drags. It cannot permit resumption 
 - **OQ-2 (T02):** Use a fresh one-finger tap, recognized on lift. RF-7 defines configurable 200 ms and 1 mm limits.
 - **OQ-3 (T01):** Use group displacement with a configurable 1 mm default. RF-2 defines contact validity, staggered placement, and baseline resets.
 - **OQ-4 (T03):** Preserve each grace deadline until continuation or termination. Require qualifying movement before expiry. Expiry wins exact-time ties.
+- **OQ-5 (T06):** Recover enabled dragging automatically after access, cleanup, and zero-contact checks. Never resume a terminated gesture.
+- **OQ-6 (T06):** Default startup to enabled. Runtime enable/disable commands override configuration until restart. Disablement terminates active drags immediately.
 - **T04:** Match ordinary pointing and the logical primary button. Discard threshold-crossing movement and reset motion baselines after contact replacement.
 - **T05:** Separate failed-gesture termination from pending release. Suppress the affected touchpad until cleanup completes, then restore ordinary input independently.
 
 ## [OPEN QUESTIONS]
 
-- **OQ-5:** After a failure, must users explicitly enable the feature again? Can availability recover automatically without resuming the interrupted drag?
-- **OQ-6:** How do users enable or disable the feature? What happens when they disable it during a drag?
 - **OQ-7:** What happens when users press a physical button or use another pointing device during a drag?
 - **OQ-8:** Which touchpads, applications, and macOS reference behavior define the acceptance baseline?
 - **OQ-9:** What response-time limits and numerical tolerances verify the approved ordinary-pointing match?

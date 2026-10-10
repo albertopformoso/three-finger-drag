@@ -16,12 +16,11 @@ The input backend remains provisional until its feasibility checks pass.
 | Decision | Required clarification | Coverage |
 | --- | --- | --- |
 | Pointer verification | Define numerical tolerances and response limits for T04's ordinary-pointing match. | RF-3, RF-6, OQ-9 |
-| Recovery | Define recovery, fresh-contact requirements, enablement, and disablement. | RF-2, RF-8, RF-9, OQ-5, OQ-6 |
 | External actions | Define physical buttons, other pointing devices, cancellation, and lifecycle interruptions. | RF-3, RF-7, RF-8, RF-9, OQ-7 |
 | Compatibility | Select touchpads, Hyprland versions, applications, window states, and the macOS reference. | RF-1, RF-4, OQ-8 |
 | Configuration | Define remaining settings and invalid-configuration behavior. T01 through T03 approve drag-start, ending-tap, and grace settings. | RF-1, RF-2, RF-5, RF-7, RF-9 |
 
-The specification must also address contact noise and contacts remaining after expiry.
+The specification must also address contact noise.
 It must define outcomes for process exit, session lock, suspend, device changes, and target-window disappearance.
 
 The completion criteria must preserve the constitution's macOS-equivalence requirement.
@@ -81,7 +80,7 @@ Coverage: RF-5, RF-6, and RF-7. Specification references: resolved OQ-1 and OQ-4
 - Cancel the timer after successful continuation. A later interruption starts a new grace period.
 - At the exact deadline, expiry takes priority over qualifying movement and candidate lift. Release once.
 
-T04 discards movement through the continuation threshold-crossing event. T06 defines rearming after expiry.
+T04 discards movement through the continuation threshold-crossing event. T06 requires zero contacts before rearming after expiry.
 T11 defines configuration changes during a drag and invalid-configuration recovery.
 The 300 ms default requires comparison with macOS.
 
@@ -113,13 +112,32 @@ Coverage: RF-8 and RF-9.
 - Complete cleanup after button release or desktop confirmation that the owning virtual device or session no longer exists.
 - Retain the obligation after unconfirmed loss. Never deliver an old release into a new session.
 - Restore ordinary pointing and scrolling after cleanup when touchpad access is available.
-- Restore ordinary input independently of new three-finger drag availability, which remains assigned to T06.
+- Restore ordinary input independently of new three-finger drag availability, following T06's readiness rules.
 - Report the failed operation, cause, pending-release status, and available recovery guidance in English.
 - Suppress repeated identical errors from unchanged cleanup failures.
 
 The backend must establish reliable evidence for release or owner disappearance.
 Kernel write acceptance alone does not prove desktop receipt. Missing confirmation keeps cleanup pending.
 T10 defines measurable cleanup response limits. T08 retains process and session lifecycle decisions.
+
+### Approved T06 decisions
+
+Coverage: RF-2, RF-7, RF-8, and RF-9. Specification references: resolved OQ-5 and OQ-6.
+
+- Request enabled operation by default at startup. Allow configuration to request disabled startup.
+- Before arming, require available access, completed cleanup, and an observed zero-contact state.
+- Recover automatically after failure when enabled and those prerequisites hold. Never resume a terminated gesture.
+- Provide runtime enable and disable commands. Keep their overrides in memory until restart.
+- Read startup enablement from configuration on restart. Runtime commands do not rewrite configuration.
+- Disablement immediately terminates dragging or grace, cancels timers, and releases the held button.
+- Apply T05 cleanup if release fails. Enablement and disablement cannot bypass pending cleanup.
+- After normal completion, require zero valid contacts before another drag. Zero contacts at completion already satisfies this condition.
+- Preserve ordinary pointing and scrolling while waiting for fresh contacts when access and cleanup permit.
+- Once disabled and cleanup completes, return three-finger gestures to normal desktop handling.
+
+Arming is a latch for the next fresh gesture, not a requirement that contacts remain absent during recognition.
+Consume it when a drag starts. Clear it on failure or disablement.
+Keep requested enablement separate from access, cleanup, armed state, and ordinary-input routing.
 
 ## 2. Module structure
 
@@ -223,15 +241,15 @@ Coverage: RF-1 through RF-9. Constitution principles 3 and 5.
 | Tap candidate | Contact identity, initial position, touchdown time, maximum displacement, cancellation state, all-contacts-lifted eligibility | Keep in memory. Reset after the required zero-contact state. RF-7. |
 | Output state | Desired button state, submitted button state, held output button, release pending, owning device and session identities, cleanup evidence | Keep cleanup separate and session-bound. Submission alone is not desktop confirmation. RF-2, RF-4, RF-7, RF-9. |
 | Effect | Hold button, move pointer, release button, schedule timer, cancel timer, route input | Abstract commands without native handles. RF-2 through RF-9. |
-| Availability | Drag enablement, device access, output access, desktop availability, ordinary-input routing state | Restore ordinary input independently after cleanup. RF-1, RF-8, RF-9. |
+| Availability | Configured startup state, optional runtime override, requested enablement, armed state, access, desktop availability, ordinary-input routing | Keep requested enablement and readiness separate. RF-1, RF-2, RF-7, RF-8, RF-9. |
 | Failure report state | Failed operation, cause, pending-release status, last reported error identity | Keep in memory. Suppress unchanged repeated errors without storing input events. RF-9. |
-| Explicit configuration | Schema version, drag-start threshold, ending-tap limits, and other approved user-selected settings | Only this record may persist. RF-1, RF-2, RF-5, RF-7, RF-9. |
+| Explicit configuration | Schema version, startup enablement, drag-start threshold, ending-tap limits, grace duration, and other approved settings | Runtime overrides never persist. RF-1, RF-2, RF-5, RF-7, RF-9. |
 
 Use monotonic timestamps from one mapped clock domain.
 Device timestamps and timer deadlines must be comparable before the runtime orders events.
 Assign each timer a generation so canceled timers cannot affect later drags.
 
-Proposed phases are `ready`, `dragging`, `grace`, and `unavailable`.
+Proposed phases are `disabled`, `unavailable`, `awaiting_contacts_up`, `ready`, `dragging`, and `grace`.
 Keep pending output cleanup in a separate record.
 T05 requires this separation. A terminated gesture may remain unavailable for new drags while ordinary input resumes after cleanup.
 
@@ -257,6 +275,7 @@ It is documentation data, not a configuration file, logging format, or recording
   "output_session_id": "synthetic-session-1",
   "availability": {
     "enabled": true,
+    "armed": true,
     "device_access": true,
     "output_access": true,
     "desktop_available": true
@@ -276,6 +295,11 @@ Use JSON through the Go standard library for approved explicit settings.
 Use `$XDG_CONFIG_HOME/three-finger-drag/config.json` when `XDG_CONFIG_HOME` specifies an absolute directory.
 Otherwise, use `$HOME/.config/three-finger-drag/config.json`.
 Do not create a configuration file merely because the utility starts.
+
+Use the Boolean setting `enabled_on_startup`, with an implicit default of `true`.
+An explicit `false` requests disabled startup. Apply strict JSON validation to this setting.
+Runtime enable and disable commands change only an in-memory override.
+On restart, discard the override and read the configured startup state again.
 
 Reject unknown fields and unsupported schema versions with English errors.
 The specification must define whether invalid configuration stops startup or selects an approved fallback.
@@ -325,8 +349,32 @@ Coverage: RF-1, RF-8, RF-9.
 2. Check the supported session, selected device, required access, and output capabilities.
 3. Prepare virtual devices and verify desktop recognition before routing input.
 4. Acquire exclusive input ownership through the verified backend procedure.
-5. Apply the approved startup state.
+5. Read requested enablement from startup configuration. Clear any runtime override and initialize recognition as unarmed.
 6. If any step fails, release acquired resources and report the operation, cause, and available guidance.
+
+Use the readiness procedure after successful startup and each relevant availability change.
+Disabled startup must preserve normal desktop gestures without reserving three-finger input after cleanup.
+
+### Enablement, recovery, and rearming
+
+Coverage: RF-2, RF-7, RF-8, and RF-9.
+
+1. On an enable command, set the in-memory override to enabled and evaluate readiness.
+2. On a disable command, set the override to disabled and clear armed recognition.
+3. If disablement interrupts dragging or grace, terminate the gesture, cancel timers, and discard queued movement.
+4. Release its held button immediately. If release fails, retain T05's pending cleanup and affected-touchpad suppression.
+5. While cleanup remains pending, block new drags and discard affected-touchpad input regardless of requested enablement.
+6. After cleanup, restore ordinary pointing and scrolling when touchpad access permits, independently of readiness.
+7. If requested enablement is disabled, allow normal desktop three-finger handling and remain disabled.
+8. If required access is unavailable, remain unarmed and unavailable for new drags.
+9. Once enabled, access is available, and cleanup is complete, wait for an observed zero-contact state.
+10. When zero valid contacts are observed, arm recognition and enter ready state.
+11. Permit subsequent fresh contacts to form a gesture without clearing arming merely because contacts appear.
+12. On drag start, consume arming. On failure, clear arming without changing requested enablement.
+13. At normal completion, rearm if zero contacts remain and readiness prerequisites hold. Otherwise, wait for all valid contacts to lift.
+
+Runtime commands must target the running instance. Their transport belongs to the command-interface implementation.
+Failed gestures never resume. Automatic recovery enables recognition only for a fresh gesture after readiness checks pass.
 
 ### Event ordering
 
@@ -346,7 +394,7 @@ Coverage: RF-2 through RF-9.
 Coverage: RF-2, RF-3, RF-4, RF-8.
 
 1. If release remains pending, discard affected-touchpad input without gesture recognition or ordinary forwarding.
-2. Otherwise, require drag readiness before recognition. Use RF-8 for ordinary routing and T06 for new-drag availability.
+2. Otherwise, require enabled, armed recognition with access available. Use RF-8 for ordinary routing while waiting.
 3. Exclude detected palms and include thumbs when forming the valid contact set.
 4. If the valid contact count or identities change, discard the previous start baseline.
 5. If the count differs from three, preserve permitted ordinary input and wait for exactly three valid contacts.
@@ -357,7 +405,7 @@ Coverage: RF-2, RF-3, RF-4, RF-8.
 10. If displacement reaches or exceeds the threshold, claim the gesture through the verified routing procedure.
 11. Submit a logical primary-button hold through the desktop mapping at the current pointer position.
 12. If submission fails, enter the failure procedure.
-13. Establish the motion baseline at the threshold-crossing event's group position and enter the dragging phase.
+13. Consume armed recognition, establish the motion baseline at the crossing event, and enter dragging.
 14. Discard all movement through that event. Emit movement only for subsequent group changes.
 
 ### Move and pause
@@ -425,7 +473,7 @@ Coverage: RF-7, RF-8.
 3. Cancel the current timer generation.
 4. Submit one button release for the held drag action.
 5. If submission fails, enter the failure procedure.
-6. Clear gesture baselines and apply the approved contact-rearming rule.
+6. Clear gesture baselines and rearm only after zero valid contacts and the other readiness checks.
 7. Restore ordinary input through the verified routing procedure.
 
 ### Handle failures
@@ -444,7 +492,7 @@ Coverage: RF-9, with RF-8 interaction.
 10. Report the operation, cause, pending-release status, and available guidance in English, without input-event details.
 11. Suppress repeated copies of the same unchanged error during cleanup retries.
 12. After cleanup, restore ordinary input when touchpad access is available, independently of new-drag readiness.
-13. Apply T06's future recovery policy for new drags. Never resume the terminated gesture.
+13. Preserve requested enablement and clear arming. Automatically evaluate readiness after recovery, without resuming the terminated gesture.
 
 Retain only cleanup and error-deduplication metadata. Do not persist it or retain suppressed input events.
 The adapter supplies cleanup evidence to the runtime. Gesture logic must not query the desktop.
@@ -648,6 +696,33 @@ Coverage: RF-8 and RF-9. These scenarios define future tests, not executed imple
 Use deterministic runtime tests for routing, canceled effects, and error deduplication.
 Use adapter integration tests to verify release evidence and confirmation of device or session disappearance.
 Check that successful submission alone cannot clear an obligation without the verified release contract.
+
+### T06 acceptance scenarios
+
+Coverage: RF-2, RF-7, RF-8, and RF-9. These scenarios define future tests, not executed implementation tests.
+
+| Scenario | Expected result |
+| --- | --- |
+| Startup setting is absent | Request enabled operation without writing implicit configuration. |
+| Startup setting is false | Keep dragging disabled and allow normal desktop gesture behavior after cleanup. |
+| Startup or enablement occurs with contacts down | Wait for available access, completed cleanup, and zero valid contacts before arming. |
+| Readiness prerequisites hold and the contact count is zero | Arm recognition. Subsequent fresh contacts can start a drag under RF-2. |
+| Contacts appear after arming | Keep recognition armed until drag start or loss of readiness. Do not require zero contacts continuously. |
+| Grace expires with one, two, or three contacts remaining | End the drag and wait for all valid contacts to lift before another drag. |
+| A drag ends with zero contacts | Treat the zero-contact requirement as satisfied. Rearm when the remaining checks pass. |
+| A failed gesture loses access, then access and cleanup recover | Automatically wait for zero contacts and arm a new gesture if still enabled. |
+| Failure recovery occurs while explicitly disabled | Keep dragging disabled. Restore ordinary input when access and cleanup permit. |
+| Disablement occurs during dragging or grace | Immediately terminate, stop motion, cancel timers, and release without waiting for expiry. |
+| Disablement cannot release the held button | Preserve T05 cleanup and suppression. Do not restore desktop three-finger handling prematurely. |
+| Enablement occurs during pending cleanup | Record enabled intent but block recognition and affected-touchpad input until cleanup completes. |
+| Cleanup completes while enabled contacts remain down | Restore ordinary pointing and scrolling while waiting for zero contacts to arm dragging. |
+| Disablement completes with no pending cleanup | Stop reserving three-finger gestures. Allow normal desktop gestures. |
+| Runtime disable overrides configured enabled startup | Remain disabled until another command or restart. Restart uses configuration. |
+| Runtime enable overrides configured disabled startup | Enable subject to readiness checks. Restart returns to configured disabled startup. |
+| Runtime enable or disable command executes | Leave startup configuration unchanged. |
+
+Use deterministic state tests to distinguish requested enablement, readiness, and ordinary-input routing.
+Use integration tests to verify commands reach the running instance and disabled operation restores normal desktop gestures.
 
 ### Adapter integration tests
 

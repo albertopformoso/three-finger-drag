@@ -15,7 +15,6 @@ The input backend remains provisional until its feasibility checks pass.
 
 | Decision | Required clarification | Coverage |
 | --- | --- | --- |
-| Ending-tap recognition | Define ending-tap contacts, duration, and movement tolerance. T01 resolves drag-start recognition. | RF-7, OQ-2 |
 | Timing | Define grace duration, restart rules, stationary contacts, and events at expiry. | RF-5, RF-6, RF-7, OQ-1, OQ-4 |
 | Pointer behavior | Define motion scaling, acceleration, direction, and measurable response limits. | RF-3, RF-6, OQ-9 |
 | Drag action | Confirm the logical primary-button action, including left-handed settings. | RF-2, RF-4, RF-7 |
@@ -23,7 +22,7 @@ The input backend remains provisional until its feasibility checks pass.
 | Recovery | Define recovery, fresh-contact requirements, enablement, and disablement. | RF-2, RF-8, RF-9, OQ-5, OQ-6 |
 | External actions | Define physical buttons, other pointing devices, cancellation, and lifecycle interruptions. | RF-3, RF-7, RF-8, RF-9, OQ-7 |
 | Compatibility | Select touchpads, Hyprland versions, applications, window states, and the macOS reference. | RF-1, RF-4, OQ-8 |
-| Configuration | Define remaining settings and invalid-configuration behavior. T01 approves the configurable drag-start threshold. | RF-1, RF-2, RF-5, RF-7, RF-9 |
+| Configuration | Define remaining settings and invalid-configuration behavior. T01 and T02 approve drag-start and ending-tap settings. | RF-1, RF-2, RF-5, RF-7, RF-9 |
 
 RF-5 currently prescribes a timer start during situations where OQ-4 leaves timer restarts open.
 RF-3 and RF-7 also require an explicit precedence rule at grace-period expiry.
@@ -54,6 +53,26 @@ Coverage: RF-2 and RF-3. Specification reference: RF-2 and resolved OQ-3.
 The default still requires macOS comparison. T04 defines pointer scaling and initial output movement.
 T11 defines invalid-configuration recovery and configuration changes during a drag.
 The start threshold does not define grace-period continuation behavior.
+
+### Approved T02 decisions
+
+Coverage: RF-7. Specification reference: ending-tap recognition and resolved OQ-2.
+
+- Require a fresh single valid contact after all valid contacts lift. Include thumbs and ignore detected palms.
+- Recognize the ending tap on that contact's lift, not its touchdown.
+- Default to a maximum duration of 200 ms, including equality.
+- Default to a maximum displacement of 1 mm from the initial contact position, including equality.
+- Check the maximum displacement throughout contact. Returning after exceeding the limit does not restore the candidate.
+- Cancel the candidate if its duration or displacement exceeds its limit, or a second valid contact appears.
+- Require all valid contacts to lift before another attempt after cancellation.
+- Configure duration and movement independently from the drag-start threshold.
+- Accept only finite numeric limits greater than zero.
+- Require touchdown and lift before grace expiry. Touchdown does not extend the grace deadline.
+- Consume a recognized ending tap and release the held drag without an additional click.
+
+T03 defines precedence for lift exactly at grace expiry. Candidate cancellation alone does not release the drag.
+T11 defines invalid-configuration recovery and configuration changes during a drag.
+Both defaults require comparison with macOS.
 
 ## 2. Module structure
 
@@ -142,12 +161,13 @@ Coverage: RF-1 through RF-9. Constitution principles 3 and 5.
 | Record | Main fields | Rules and coverage |
 | --- | --- | --- |
 | Contact frame | Device ID, sequence, monotonic timestamp, contact IDs, positions, classification | Complete frames only. RF-2, RF-3, RF-5, RF-7. |
-| Gesture policy | Start threshold in millimeters, tap rules, grace duration, timer precedence, motion mapping | T01 approves the start threshold. Remaining rules require approval. RF-2 through RF-7. |
+| Gesture policy | Start threshold, tap duration limit, tap displacement limit, grace duration, timer precedence, motion mapping | T01 and T02 approve start and tap rules. Remaining rules require approval. RF-2 through RF-7. |
 | Gesture state | Phase, valid contact identities, start baseline, motion baseline, grace deadline, timer generation | Separate fixed start and movement baselines. No disk serialization. RF-2 through RF-7. |
+| Tap candidate | Contact identity, initial position, touchdown time, maximum displacement, cancellation state, all-contacts-lifted eligibility | Keep in memory. Reset after the required zero-contact state. RF-7. |
 | Output state | Desired button state, submitted button state, release pending, output-session identity | Keep failed release separate from gesture completion. RF-2, RF-7, RF-9. |
 | Effect | Hold button, move pointer, release button, schedule timer, cancel timer, route input | Abstract commands without native handles. RF-2 through RF-9. |
 | Availability | Enabled state, device access, output access, desktop availability | Determines readiness and failure handling. RF-1, RF-8, RF-9. |
-| Explicit configuration | Schema version, drag-start threshold, and other approved user-selected settings | Only this record may persist. RF-1, RF-2, RF-5, RF-7, RF-9. |
+| Explicit configuration | Schema version, drag-start threshold, ending-tap limits, and other approved user-selected settings | Only this record may persist. RF-1, RF-2, RF-5, RF-7, RF-9. |
 
 Use monotonic timestamps from one mapped clock domain.
 Device timestamps and timer deadlines must be comparable before the runtime orders events.
@@ -201,13 +221,20 @@ Do not create a configuration file merely because the utility starts.
 
 Reject unknown fields and unsupported schema versions with English errors.
 The specification must define whether invalid configuration stops startup or selects an approved fallback.
-Public timing settings remain pending OQ-1. This plan assigns no default grace duration.
+Grace-period timing settings remain pending OQ-1. This plan assigns no default grace duration.
 
 Use `drag_start_threshold_mm` for the approved drag-start setting.
 If the setting is absent, use 1 mm without writing an implicit default to disk.
 Accept only a finite JSON number greater than zero. Reject strings, booleans, null, zero, negative values, and nonfinite values.
 Do not convert numeric strings into numbers.
 Pass the validated threshold to gesture logic as a policy value, without exposing configuration access to that package.
+
+Use `ending_tap_max_duration_ms` for the ending-tap duration limit, with a default of 200 ms.
+Use `ending_tap_max_displacement_mm` for the ending-tap displacement limit, with a default of 1 mm.
+Resolve each absent setting independently. Do not write implicit defaults to disk.
+Apply the same finite, positive JSON-number validation to each setting.
+Keep these limits independent of `drag_start_threshold_mm`.
+Supply validated limits to the gesture package through policy values.
 
 Atomic save procedure:
 
@@ -295,6 +322,27 @@ Coverage: RF-5, RF-6.
 4. Calculate future movement from the new baseline.
 5. Exclude absolute contact displacement caused by finger repositioning.
 
+### Recognize an ending tap
+
+Coverage: RF-7.
+
+1. During the grace period, track whether all valid contacts have lifted.
+2. After zero valid contacts, start a candidate when exactly one valid contact touches down before expiry.
+3. Store its identity, initial position, and monotonic touchdown time. Initialize maximum displacement to zero.
+4. Preserve the grace deadline and defer recognition until finger lift.
+5. Ignore detected palms. Count a thumb as a valid contact.
+6. Update maximum displacement using Euclidean distance from the initial position in millimeters.
+7. Cancel the candidate if displacement or elapsed duration exceeds its configured limit.
+8. Cancel the candidate if a second valid contact appears.
+9. After cancellation, wait for zero valid contacts before accepting a fresh candidate.
+10. If grace expiry precedes candidate lift, discard the candidate and end the drag through expiry.
+11. If the candidate lifts before grace expiry, check duration and maximum displacement against their inclusive limits.
+12. If both limits pass, emit one ending-tap result for consumption and drag release.
+
+Apply T03's future precedence rule when candidate lift and grace expiry share a timestamp.
+Candidate cancellation alone generates no drag-release effect.
+Clear candidate state when the grace period ends through continuation, expiry, recognized tap, or failure.
+
 ### End a drag
 
 Coverage: RF-7, RF-8.
@@ -381,7 +429,7 @@ Assert observable effect sequences and state invariants rather than private impl
 | RF-4 | Start effects hold the button before drag motion and preserve the current pointer origin. |
 | RF-5 | Zero, one, two, and additional contacts pause movement and apply the approved grace rules. |
 | RF-6 | Continuation cancels stale deadlines, preserves the hold, and rejects repositioning displacement. |
-| RF-7 | Expiry and ending taps release once. Ending taps produce no additional click. |
+| RF-7 | Verify fresh-contact eligibility, inclusive tap limits, cancellation, configuration, and recognition on lift. Expiry and ending taps release once. |
 | RF-8 | Ordinary input routes only under the approved ownership rules. Competing three-finger output remains suppressed. |
 | RF-9 | Failures cancel motion and timers. Pending releases survive recoverable output failure without resuming the drag. |
 
@@ -411,6 +459,35 @@ Coverage: RF-2 and RF-3. These are authored future tests, not executed implement
 | The configuration supplies zero, a negative number, a string, null, a boolean, or a nonfinite value | Reject the threshold. |
 
 Also test equal displacement along each axis and diagonally to verify direction-independent millimeter measurements.
+
+### T02 acceptance scenarios
+
+Coverage: RF-7. These scenarios define future tests, not executed implementation tests.
+Unless stated otherwise, use default limits and a grace deadline later than the candidate's lift.
+
+| Scenario | Expected result |
+| --- | --- |
+| All valid contacts lift, then one finger touches and lifts within both limits | Recognize on lift. Release the drag once without an additional click. |
+| A valid candidate touches down but remains down | Do not recognize an ending tap at touchdown. Preserve the grace deadline. |
+| One drag finger remains and lifts without a fresh touchdown | No ending tap occurs. |
+| The fresh contact is a thumb | Apply the same ending-tap rules. |
+| A detected palm remains while all fingers lift | The valid contact count reaches zero. A later fresh finger can become a candidate. |
+| Candidate durations are 199 ms, 200 ms, and 201 ms | Accept the first two durations. Cancel the third candidate. |
+| Maximum displacements are 0.99 mm, 1 mm, and 1.01 mm | Accept the first two distances. Cancel the third candidate. |
+| Displacement exceeds 1 mm and returns to zero | The candidate remains canceled. |
+| Motion travels more than 1 mm but always stays within 1 mm of the initial position | Accept movement. Total traveled distance is not the displacement limit. |
+| A second valid contact appears, then lifts | Cancel the candidate. The remaining contact cannot restore it. |
+| All valid contacts lift after cancellation, then one touches down before grace expiry | Allow a fresh candidate under the same limits. |
+| A detected palm appears beside a candidate | Keep the candidate valid if its other conditions still hold. |
+| Grace expiry occurs before candidate lift | End through expiry. The later lift cannot end the same drag again. |
+| Candidate lift coincides exactly with grace expiry | Expected precedence remains pending T03. |
+| Duration is configured to 300 ms and displacement to 2 mm | Accept 300 ms and 2 mm. Reject values exceeding either configured limit. |
+| Only one ending-tap setting is present | Use that value and the independent default for the other setting. |
+| The drag-start threshold changes | Ending-tap limits remain unchanged. |
+| Either tap setting is zero, negative, nonnumeric, or nonfinite | Reject the value. Configuration recovery remains pending T11. |
+
+Use synthetic coordinates and injected monotonic time for boundary checks.
+Verify that canceled candidates cannot emit ending-tap results when their original contact later lifts.
 
 ### Adapter integration tests
 

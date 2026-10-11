@@ -57,11 +57,12 @@ Enable the systemd user service to run the program at startup:
 │       └── SKILL.md
 └── specs
     └── 001-three-finger-drag
+        ├── environment-evidence.md
         ├── plan.md
         ├── spec.md
         └── tasks.md
 
-5 directories, 10 files
+5 directories, 11 files
 ```
 
 ## License

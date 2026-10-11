@@ -276,6 +276,9 @@ T13 onward must provide technical contracts, backend-feasibility evidence, and a
 ## 2. Establish backend feasibility
 
 Prepare existing Arch Linux, CachyOS, and macOS test environments before these tasks.
+The user approved CachyOS-only development while deferring Arch Linux and macOS inventories.
+T13a gates local experiments. T13 completes only when T13a, T13b, and T13c all have evidence.
+Deferred environments remain required for their acceptance tasks and release. Deferral does not count as a passing test.
 Machine installation and hardware procurement are external prerequisites, not hidden 30-minute tasks.
 Select one approved Linux session for initial experiments. Validate the other distribution during acceptance.
 
@@ -285,9 +288,12 @@ If an experiment needs more work, add a bounded follow-up task and update T29's 
 
 | Task | Description | RF coverage | Time | Depends on | Completion criteria | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| T13 | Check the prepared test environments. | RF-1, RF-4 | 20 min | T09 | Made when: Inventories record T09's exact Linux versions, touchpad capabilities, application backends, and fixed Mac hardware, build, and settings. | - |
-| T14 | Define the native adapter API and dependency. | RF-1, RF-8, RF-9 | 25 min | T12 | Made when: The plan lists the required libevdev calls, version constraints, ownership rules, and dependency justification. | - |
-| T15 | Establish a bounded experiment harness. | RF-1, RF-8, RF-9 | 30 min | T13, T14 | Made when: The harness can open and close one synthetic device without recording input or capturing unrelated devices. | - |
+| T13 | Check the prepared test environments. | RF-1, RF-4 | 20 min | T09 | Made when: Inventories record T09's exact Linux versions, touchpad capabilities, application backends, and fixed Mac hardware, build, and settings. Evidence: [environment assessment](environment-evidence.md). Local T13a is complete. Arch Linux and Mac inventories remain deferred. | partial |
+| T14 | Define the native adapter API and dependency. | RF-1, RF-8, RF-9 | 25 min | T12 | Made when: The plan lists the required libevdev calls, version constraints, ownership rules, and dependency justification. Evidence: [native adapter contract](plan.md#t14-native-adapter-contract), checked against installed 1.14.0 headers. Backend feasibility remains unverified. | done |
+| T13a | Complete the CachyOS environment inventory. | RF-1, RF-4 | 20 min | T09 | Made when: Local versions, compatible touchpad evidence, and Thunar/Mousepad backends are verified. Evidence: [local inventory](environment-evidence.md). Static capabilities, both backends, and successful full-update output recorded. Functional device checks remain under T28. | done |
+| T13b | Complete the Arch Linux environment inventory. | RF-1, RF-4 | 20 min | T09 | Made when: Arch versions, touchpad capabilities, and both application backends have evidence. User deferred this environment. | - |
+| T13c | Complete the native macOS reference inventory. | RF-1, RF-4 | 20 min | T09 | Made when: Mac model, trackpad, build, fixed settings, Finder, and TextEdit have evidence. User deferred this inventory. | - |
+| T15 | Establish a bounded experiment harness. | RF-1, RF-8, RF-9 | 30 min | T13a, T14 | Made when: The harness can open and close one synthetic device on CachyOS without recording input or capturing unrelated devices. | - |
 | T16 | Probe virtual-touchpad recognition. | RF-1, RF-8 | 25 min | T15 | Made when: Evidence records Hyprland recognition, seat assignment, capabilities, axis ranges, resolution, and applicable settings. | - |
 | T17 | Probe virtual-pointer recognition. | RF-1, RF-3, RF-4 | 25 min | T15 | Made when: Evidence records pointer recognition, seat assignment, primary-button behavior, and relative-motion delivery. | - |
 | T18 | Probe exclusive physical-input ownership. | RF-1, RF-8 | 25 min | T16 | Made when: Evidence records grab acquisition, duplicate-event suppression, virtual-device exclusion, and ownership release. | - |

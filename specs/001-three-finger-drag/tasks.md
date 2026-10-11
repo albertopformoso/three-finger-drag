@@ -40,7 +40,7 @@ These tasks capture user decisions. They do not select new behavior without appr
 | T08 | Define lifecycle and desktop interruption behavior. | RF-4, RF-8, RF-9 | 25 min | T05, T06 | Made when: Approved criteria cover exit, crash, lock, suspend, session loss, monitor changes, and target-window disappearance. Evidence: [T08 decisions](#t08-completion-evidence). | done |
 | T09 | Select the compatibility and macOS baseline. | RF-1, RF-4, RF-8 | 25 min | None | Made when: The user approves device capabilities, versions, applications, XWayland scope, window states, and the macOS reference. Evidence: [T09 decisions](#t09-completion-evidence). | done |
 | T10 | Define measurable responsiveness and comparison rules. | RF-2, RF-3, RF-6, RF-7, RF-9 | 25 min | T03, T04, T09 | Made when: Approved limits and measurement methods cover start, motion, continuation, release, and recoverable failure cleanup. Evidence: [T10 decisions](#t10-completion-evidence). | done |
-| T11 | Define explicit configuration behavior. | RF-1, RF-5, RF-7, RF-9 | 20 min | T03, T06 | Made when: Approved settings have defaults, bounds, missing-file behavior, invalid-value behavior, and rules for changes during a drag. | - |
+| T11 | Define explicit configuration behavior. | RF-1, RF-5, RF-7, RF-9 | 20 min | T03, T06 | Made when: Approved settings have defaults, bounds, missing-file behavior, invalid-value behavior, and rules for changes during a drag. Evidence: [T11 decisions](#t11-completion-evidence). | done |
 | T12 | Complete the specification consistency review. | RF-1 through RF-9 | 30 min | T01 through T11 | Made when: RF contradictions are resolved, release-blocking questions are closed, and completion criteria preserve the constitution. | - |
 
 ### T01 completion evidence
@@ -232,6 +232,26 @@ The user approved these decisions in the T10 clarification discussion:
 Evidence: [NFR-2 acceptance](spec.md#responsiveness-and-comparison-acceptance), [resolved OQ-9](spec.md#resolved-decisions), and [plan decisions](plan.md#approved-t10-decisions).
 The [measurement procedure](plan.md#t10-measurement-procedure-and-acceptance-scenarios) defines future verification.
 T10 completes acceptance-policy decisions, not performance tests or macOS measurements.
+
+### T11 completion evidence
+
+The user approved these decisions in the T11 clarification discussion:
+
+- Missing configuration and omitted settings use defaults without creating a file.
+- Defaults are enabled startup, a 1 mm drag threshold, 300 ms grace, and ending-tap limits of 200 ms and 1 mm.
+- Unreadable, malformed, or invalid configuration fails startup while preserving normal touchpad handling.
+- Report the file, cause, and setting when possible, with corrective guidance. Do not silently substitute defaults for invalid values.
+- File changes take effect only after restart. Runtime enable, disable, and cancel commands retain their existing behavior.
+- Reject unknown or duplicate settings, unsupported versions, and incorrect types without string coercion.
+- Omitted version means version 1. Only an explicit integer 1 is supported.
+- Require finite positive numeric settings. Reject conversion overflow or rounding to zero and report supported ranges without clamping.
+- Allow explicit touchpad selection. Select automatically only when exactly one compatible device exists.
+- Fail ambiguous selection with a list of choices. Fail missing or incompatible explicit selection without substitution.
+- Fail startup when no compatible touchpad exists, preserving normal touchpad handling.
+
+Evidence: [configuration and selection](spec.md#configuration-and-touchpad-selection), [plan decisions](plan.md#approved-t11-decisions), and [configuration design](plan.md#configuration-persistence).
+The [T11 acceptance scenarios](plan.md#t11-acceptance-scenarios) define future verification. T11 completes specification decisions, not implementation testing.
+Implementation must document exact numeric conversion ranges and the device-identifier format before their validation tests.
 
 ## 2. Establish backend feasibility
 

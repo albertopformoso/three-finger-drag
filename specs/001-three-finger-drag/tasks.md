@@ -41,7 +41,7 @@ These tasks capture user decisions. They do not select new behavior without appr
 | T09 | Select the compatibility and macOS baseline. | RF-1, RF-4, RF-8 | 25 min | None | Made when: The user approves device capabilities, versions, applications, XWayland scope, window states, and the macOS reference. Evidence: [T09 decisions](#t09-completion-evidence). | done |
 | T10 | Define measurable responsiveness and comparison rules. | RF-2, RF-3, RF-6, RF-7, RF-9 | 25 min | T03, T04, T09 | Made when: Approved limits and measurement methods cover start, motion, continuation, release, and recoverable failure cleanup. Evidence: [T10 decisions](#t10-completion-evidence). | done |
 | T11 | Define explicit configuration behavior. | RF-1, RF-5, RF-7, RF-9 | 20 min | T03, T06 | Made when: Approved settings have defaults, bounds, missing-file behavior, invalid-value behavior, and rules for changes during a drag. Evidence: [T11 decisions](#t11-completion-evidence). | done |
-| T12 | Complete the specification consistency review. | RF-1 through RF-9 | 30 min | T01 through T11 | Made when: RF contradictions are resolved, release-blocking questions are closed, and completion criteria preserve the constitution. | - |
+| T12 | Complete the specification consistency review. | RF-1 through RF-9 | 30 min | T01 through T11 | Made when: RF contradictions are resolved, release-blocking questions are closed, and completion criteria preserve the constitution. Evidence: [T12 review](#t12-completion-evidence). | done |
 
 ### T01 completion evidence
 
@@ -253,6 +253,26 @@ Evidence: [configuration and selection](spec.md#configuration-and-touchpad-selec
 The [T11 acceptance scenarios](plan.md#t11-acceptance-scenarios) define future verification. T11 completes specification decisions, not implementation testing.
 Implementation must document exact numeric conversion ranges and the device-identifier format before their validation tests.
 
+### T12 completion evidence
+
+The user approved these decisions during the consistency review:
+
+- After disconnection, retain selection and wait for the same compatible touchpad. Apply cleanup and fresh-contact readiness before recovery.
+- Selecting another device requires configuration changes and restart.
+- Termination events take priority over qualifying movement at the same timestamp. Preserve expiry priority and physical-button consumption.
+- Apply valid contact-count changes immediately without additional debounce. Brief departures start grace. Ignore detected palms.
+- Unresolved native macOS behavioral mismatches block release unless both constitution and specification explicitly change.
+- Preserve T10's separate timing-comparison rules.
+- Treat input synchronization loss and output-write failure as failures. Require reliable state and fresh contacts before recovery.
+- Repeated enable does not interrupt active gestures. Repeated disable adds no button effects.
+- Cancel without an active gesture changes no enablement and generates no button events. Commands never clear pending cleanup.
+- After grace expires with a tap candidate down, consume its later lift without another click or drag release.
+
+Evidence: [resolved decisions](spec.md#resolved-decisions), [completion criteria](spec.md#criteria-of-completion), and [consistency review](plan.md#approved-t12-decisions-and-consistency-review).
+The review aligns RF-1 through RF-9 and explicitly carries forward constitutional testing, persistence, and language obligations.
+The [T12 acceptance scenarios](plan.md#t12-acceptance-scenarios) define future verification, not passing implementation tests.
+T13 onward must provide technical contracts, backend-feasibility evidence, and acceptance results before release.
+
 ## 2. Establish backend feasibility
 
 Prepare existing Arch Linux, CachyOS, and macOS test environments before these tasks.
@@ -316,7 +336,7 @@ Reuse only experiment code that satisfies the approved adapter contract and prod
 | --- | --- | --- | --- | --- | --- | --- |
 | T44 | Implement device selection and ownership lifecycle. | RF-1, RF-8, RF-9 | 30 min | T30 | Made when: Adapter tests verify selection, grab/release, native-resource cleanup, and exclusion of virtual devices. | - |
 | T45 | Assemble complete contact frames. | RF-2, RF-3, RF-5, RF-7 | 30 min | T31, T44 | Made when: Synthetic adapter tests verify slots, contact IDs, complete-frame boundaries, and approved contact classification. | - |
-| T46 | Handle lost synchronization and device removal. | RF-1, RF-9 | 25 min | T45 | Made when: Injected discontinuities produce the approved resynchronization or failure outcome without stale contacts. | - |
+| T46 | Handle lost synchronization and device removal. | RF-1, RF-9 | 25 min | T45 | Made when: Discontinuities terminate gestures and trigger cleanup. Same-device recovery requires reliable state and fresh-contact readiness. | - |
 | T47 | Implement virtual-touchpad lifecycle. | RF-1, RF-8, RF-9 | 30 min | T44 | Made when: Adapter tests verify capabilities, settings, creation, delayed recognition, and destruction. | - |
 | T48 | Implement ordinary-input forwarding. | RF-8 | 25 min | T45, T47 | Made when: Adapter tests preserve complete ordinary-input frames without duplicate physical input or feedback loops. | - |
 | T49 | Implement virtual-pointer output. | RF-2, RF-3, RF-4, RF-7 | 30 min | T44 | Made when: Tests verify ordered hold, relative motion, release, and approved button mapping on the selected seat. | - |
@@ -390,7 +410,7 @@ The final evidence review depends on every expanded task.
 | T86 | Measure Arch Linux response times. | RF-1, RF-2, RF-3, RF-6, RF-7, RF-9 | 25 min | T76 through T80 | Made when: Aggregate start, movement, continuation, release, and cleanup timings satisfy the approved limits. | - |
 | T87 | Measure CachyOS response times. | RF-1, RF-2, RF-3, RF-6, RF-7, RF-9 | 25 min | T81 through T85 | Made when: Aggregate start, movement, continuation, release, and cleanup timings satisfy the approved limits. | - |
 | T88 | Run the macOS reference scenarios. | RF-2 through RF-8 | 25 min | T12, T13 | Made when: Authored scenario results and aggregate timings document the approved macOS baseline without input recordings. | - |
-| T89 | Review equivalence against macOS. | RF-2 through RF-8 | 25 min | T86, T87, T88 | Made when: Comparisons satisfy the approved equivalence criteria and every remaining difference has an explicit disposition. | - |
+| T89 | Review equivalence against macOS. | RF-2 through RF-8 | 25 min | T86, T87, T88 | Made when: Comparisons meet approved criteria. No unresolved behavioral mismatch remains unless constitution and specification changes explicitly authorize different behavior. | - |
 | T90 | Align user documentation with the verified release. | RF-1, RF-8, RF-9 | 25 min | T89 | Made when: README requirements, configuration, commands, limitations, and project tree match verified behavior and approved scope. | - |
 | T91 | Complete the RF and constitution evidence review. | RF-1 through RF-9 | 25 min | T65, T66, T75, T76 through T90 | Made when: Every RF criterion has passing evidence on both distributions and all constitutional obligations have evidence. | - |
 

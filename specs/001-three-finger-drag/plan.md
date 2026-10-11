@@ -11,14 +11,11 @@ The specification remains the authority for observable behavior.
 Technical proposals cannot resolve its open questions without an approved specification update.
 The input backend remains provisional until its feasibility checks pass.
 
-## 1. Specification decisions required before implementation
+## 1. Approved specification decisions
 
-| Decision | Required clarification | Coverage |
-| --- | --- | --- |
-| Runtime device changes | Review device replacement and switching during execution. T11 defines startup selection. | RF-1, RF-8, RF-9 |
-
-The specification must also address contact noise.
-Runtime device replacement and switching still require specification review under T12.
+T01 through T12 resolve the reviewed product-behavior questions.
+Backend feasibility and acceptance results remain unverified. This review does not establish implementation readiness for an unproven backend.
+Document exact numeric conversion ranges, device identifiers, and cleanup evidence in the technical contracts before implementing their dependent behavior.
 
 The completion criteria must preserve the constitution's macOS-equivalence requirement.
 User acceptance of unspecified differences does not establish equivalence.
@@ -235,6 +232,42 @@ Coverage: RF-1, RF-2, RF-5, RF-7, and RF-9.
 
 Numeric representations and their exact supported ranges belong to implementation design and must be documented before validation tests.
 The startup-selection policy does not authorize automatic substitution after runtime device loss.
+
+### Approved T12 decisions and consistency review
+
+Coverage: RF-1 through RF-9.
+
+- Keep the selected device identity after disconnection. Apply T05 cleanup and wait for the same compatible touchpad.
+- Changing devices requires configuration changes and restart. Never silently substitute another device during execution.
+- Process termination before qualifying movement at the same timestamp, preserving expiry priority and physical-button consumption.
+- Apply reported valid contact-count changes immediately without added debounce. Brief departures from three start grace.
+- Treat synchronization loss and output-write failure as failures. Terminate before recovering reliable state and applying fresh-contact checks.
+- Repeated enable preserves an active gesture. Repeated disable adds no button effects. Cancel without an active gesture changes no enablement.
+- Commands never clear pending cleanup.
+- If grace expires with a tap candidate down, retain a consumption marker for its later lift. Generate no ordinary tap click.
+- Unresolved macOS behavioral mismatches block release. Different accepted behavior requires explicit constitution and specification changes first.
+- T10's separate timing rules remain applicable.
+
+| Constitution principle | Review result |
+| --- | --- |
+| Minimal stack | One Go module, standard-library preference, and documented necessity for the provisional native binding remain in the plan. |
+| Specification first | Approved decisions enter the specification before dependent implementation. Behavioral mismatches cannot pass by review alone. |
+| Isolated logic | Platform events and configuration become plain values at the gesture boundary. Device and desktop access remain in adapters. |
+| Behavioral tests | The specification explicitly requires deterministic unit tests, backend integration tests, and regression tests for fixes. |
+| Minimal persistence | The specification requires in-memory gesture state, no persisted input events, and atomic explicit configuration writes under XDG. |
+| Consistent language | The specification explicitly includes English identifiers, comments, documentation, messages, and operation-and-cause errors. |
+
+| Requirements | Consistency result |
+| --- | --- |
+| RF-1 and RF-9 | Startup selection and runtime recovery retain one device identity. Capability and readiness checks still apply after return. |
+| RF-2 and RF-3 | Ready state includes lifecycle availability, reliable contacts, and released physical buttons. Repeated enable does not reset a gesture. |
+| RF-4 and RF-8 | Desktop changes and other pointers retain their approved behavior without overriding termination or cleanup. |
+| RF-5 and RF-6 | Brief valid contact departures start fixed grace immediately. Continuation still requires its threshold before expiry. |
+| RF-7 and RF-9 | Termination blocks simultaneous movement. Release attempts retain failure cleanup instead of resuming the old gesture. |
+| RF-7 and RF-8 | A post-expiry tap lift remains consumed, even after ordinary input routing becomes available. |
+
+Remaining technical evidence belongs to T13 onward, including cleanup confirmation and crash behavior.
+The numeric range and selector-format contracts remain mandatory technical deliverables, not permission to guess fallback behavior.
 
 ## 2. Module structure
 
@@ -486,7 +519,7 @@ Disabled startup must preserve normal desktop gestures without reserving three-f
 
 Coverage: RF-2, RF-7, RF-8, and RF-9.
 
-1. On an enable command, set the in-memory override to enabled and evaluate readiness.
+1. On an enable command, set the override to enabled. If already enabled, preserve any active gesture and its state.
 2. On a disable command, set the override to disabled and clear armed recognition.
 3. If disablement interrupts dragging or grace, terminate the gesture, cancel timers, and discard queued movement.
 4. Release its held button immediately. If release fails, retain T05's pending cleanup and affected-touchpad suppression.
@@ -501,6 +534,8 @@ Coverage: RF-2, RF-7, RF-8, and RF-9.
 13. At normal completion, rearm only if zero contacts, released physical buttons, and the other readiness prerequisites hold.
 
 Runtime commands must target the running instance. Their transport belongs to the command-interface implementation.
+Repeated disable while already disabled adds no button effects. Cancel without an active gesture changes neither enablement nor button state.
+No command clears pending cleanup. Readiness checks apply to new recognition, not repeated enable during an existing drag.
 An ordinary physical press clears arming. Preserve its normal button action and wait for the full rearming conditions afterward.
 Failed gestures never resume. Automatic recovery enables recognition only for a fresh gesture after readiness checks pass.
 
@@ -544,6 +579,19 @@ The Hyprland and Linux adapters own lifecycle notification access. Gesture logic
 Normal exit restores ordinary touchpad handling before releasing session-instance ownership.
 Do not persist lifecycle state or pending gesture state across process restarts.
 
+### Same-device recovery
+
+Coverage: RF-1, RF-8, and RF-9.
+
+1. Retain the identity of the touchpad selected at startup, including after automatic selection.
+2. On disconnection, terminate the gesture and apply session-bound T05 cleanup.
+3. Ignore other devices as recovery candidates. Keep their normal desktop behavior.
+4. When the same device returns, revalidate compatibility and reliable input state.
+5. Complete cleanup and readiness checks before allowing fresh gesture recognition.
+6. Require configuration changes and restart to select another touchpad.
+
+The adapter contract must distinguish the same physical device from a reused device node or another identical model.
+
 ### Event ordering
 
 Coverage: RF-2 through RF-9.
@@ -556,6 +604,11 @@ Coverage: RF-2 through RF-9.
 6. Apply returned effects in order.
 7. Record output submission results without assuming application receipt.
 8. If an effect fails, enter the failure procedure.
+
+At a shared timestamp, failures and termination events prevent qualifying movement from starting or continuing a gesture.
+Include lock, suspend preparation, exit, disablement, cancellation, and selected-touchpad physical presses in that check.
+Preserve T03 expiry priority and T07 press/release consumption even when more than one termination condition applies.
+Combine effects so the same gesture does not produce duplicate successful releases. Retain required retries after failed release.
 
 ### Start a drag
 
@@ -591,6 +644,9 @@ Coverage: RF-3, RF-4, RF-5.
 9. When contacts stop moving, emit no further gesture-driven motion. Keep the hold without a stationary-contact timeout.
 10. During grace, preserve the hold and deadline through later contact changes and stationary returns.
 
+Apply valid contact-count changes from complete reports immediately, without adding a debounce timer.
+A brief departure from three starts grace. Exclude detected palms before calculating the valid count.
+
 File managers, text widgets, and draggable title bars receive the same ordinary drag action.
 The utility does not move files directly, edit selections, or command arbitrary window movement.
 
@@ -624,13 +680,15 @@ Coverage: RF-7.
 7. Cancel the candidate if displacement or elapsed duration exceeds its configured limit.
 8. Cancel the candidate if a second valid contact appears.
 9. After cancellation, wait for zero valid contacts before accepting a fresh candidate.
-10. If grace expiry precedes or coincides with candidate lift, discard the candidate and end the drag through expiry.
+10. If grace expires first, end the drag and retain the candidate's contact identity for late-lift consumption.
 11. If the candidate lifts before grace expiry, check duration and maximum displacement against their inclusive limits.
 12. If both limits pass, emit one ending-tap result for consumption and drag release.
 
 Expiry takes priority when candidate lift and grace expiry share a timestamp. Submit only one drag release.
 Candidate cancellation alone generates no drag-release effect.
-Clear candidate state when the grace period ends through continuation, expiry, recognized tap, or failure.
+Clear recognition state when grace ends. After expiry with the candidate still down, retain only its in-memory late-lift consumption marker.
+Consume that contact's later lift without another click or drag release, then clear the marker and evaluate rearming.
+At exact-time expiry, consume the candidate's completing contact sequence while preserving expiry as the single drag-ending result.
 
 ### End a drag
 
@@ -661,6 +719,9 @@ Coverage: RF-9, with RF-8 interaction.
 11. Suppress repeated copies of the same unchanged error during cleanup retries.
 12. After cleanup, restore ordinary input when touchpad access is available, independently of new-drag readiness.
 13. Preserve requested enablement and clear arming. Automatically evaluate readiness after recovery, without resuming the terminated gesture.
+
+Input synchronization loss and output-write failure enter this procedure immediately.
+Recovering contact state does not restore an old gesture. Require reliable state and the full fresh-contact readiness checks.
 
 Retain only cleanup and error-deduplication metadata. Do not persist it or retain suppressed input events.
 The adapter supplies cleanup evidence to the runtime. Gesture logic must not query the desktop.
@@ -1013,7 +1074,7 @@ Check direction separately and preserve the no-repositioning-jump requirement.
 | Continuation qualifies | Measure its state transition internally. Measure pointer response from the next movement event. |
 | The one-finger reference travels 100 logical pixels | Allow at most 5 logical pixels of distance difference, with matching direction. |
 | The one-finger reference travels 20 logical pixels | Allow at most 2 logical pixels of distance difference, with matching direction. |
-| A macOS outcome differs for start, repositioning, continuation, tap-to-end, or release | Record and review the mismatch before claiming equivalence. |
+| A macOS outcome differs for start, repositioning, continuation, tap-to-end, or release | Block release until resolved or explicit constitution and specification changes authorize different behavior. |
 
 Use Finder and TextEdit for the fixed macOS comparison. Report timing differences separately from outcome matching.
 Linux pointer mapping remains relative to ordinary one-finger Linux pointing rather than identical screen travel on different hardware.
@@ -1047,6 +1108,30 @@ Coverage: RF-1, RF-2, RF-5, RF-7, and RF-9. These scenarios define future tests,
 Use temporary configuration files and synthetic device inventories for deterministic tests.
 Verify no device grab occurs after configuration or selection validation fails.
 Keep exact representation bounds and selector format in the implementation contract, not guessed runtime fallback behavior.
+
+### T12 acceptance scenarios
+
+Coverage: RF-1 through RF-9. These scenarios define future tests, not executed implementation tests.
+
+| Scenario | Expected result |
+| --- | --- |
+| Selected touchpad disconnects while another compatible device is present | Terminate, retain cleanup, and wait for the original device without substitution. |
+| The original compatible device returns | Require cleanup, reliable state, and fresh-contact readiness before a new gesture. |
+| A reused device node belongs to another device | Do not treat it as the selected device's return. |
+| A termination event shares a timestamp with start or continuation movement | Termination prevents that movement from starting or continuing the gesture. |
+| Physical press and expiry coincide during grace | Preserve physical-button consumption without duplicate successful drag releases. |
+| One report departs from three contacts and the next returns | Start grace immediately and apply the continuation threshold to a fresh baseline. |
+| A detected palm appears beside three valid contacts | Ignore it without a valid-count transition. |
+| Input synchronization is lost or an output write fails | Terminate and apply cleanup. Resynchronization alone cannot resume the gesture. |
+| Enable repeats during dragging or grace | Preserve phase, baselines, hold, and existing deadline. |
+| Disable repeats while already disabled | Generate no extra button effects and preserve pending cleanup. |
+| Cancel repeats without an active gesture | Preserve enablement, generate no button events, and retain any pending cleanup. |
+| A candidate remains down past grace expiry, then lifts | Release once at expiry. Consume the later lift without an ordinary click, then evaluate rearming. |
+| Native macOS outcome differs from the approved comparison scenario | Block release until resolved or constitution and specification changes explicitly authorize different behavior. |
+
+Use fake clocks and synthetic events for exact-time ordering, repeated commands, and brief contact transitions.
+Use integration tests for device identity across reconnection and suppression of post-expiry clicks.
+Retain the independent backend-feasibility requirement. Specification-review completion is not evidence that its acceptance scenarios pass.
 
 ### Adapter integration tests
 
@@ -1092,6 +1177,7 @@ Store scenario descriptions, aggregate timings, and pass/fail results only.
 Do not capture or persist input-event streams.
 Apply T10's approved measurement procedure and limits. Inconclusive measurements do not establish acceptance.
 Compare start, repositioning, continuation, tap-to-end, and release outcomes with native macOS and review every mismatch.
+An unresolved behavioral mismatch blocks release under the current constitution. Review alone cannot waive it.
 Report timing differences separately without relaxing the Linux latency limits.
 
 ### Persistence and language tests

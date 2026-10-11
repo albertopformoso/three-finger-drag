@@ -7,7 +7,7 @@ The objective is to match the macOS three-finger drag experience.
 The first release supports Arch Linux and CachyOS with Hyprland on Wayland.
 
 A brief grace period lets users lift or reposition their fingers without releasing a drag.
-The team must resolve timing details and compare observable behavior with macOS before claiming an exact match.
+The team must verify the specified timing limits and compare observable behavior with macOS before claiming an exact match.
 
 ## Users
 
@@ -31,6 +31,7 @@ The team must resolve timing details and compare observable behavior with macOS 
 - **Enabled:** Three-finger dragging is requested by the startup configuration or the latest runtime enable command. Readiness remains a separate condition.
 - **Armed:** The utility has observed zero valid contacts with all selected-touchpad physical buttons released after the applicable readiness checks.
 - **Ready:** The feature is enabled and armed, required access is available, and neither an active drag nor pending release exists.
+  Lifecycle availability, reliable contact state, and released selected-touchpad physical buttons are also required.
 - **Lifecycle available:** The desktop session is available and unlocked. The utility is not exiting, preparing for suspend, or suspended.
 - **Active drag:** A gesture in dragging or grace that has not terminated. Failure terminates it even if button release remains pending.
 - **Terminated gesture:** A gesture that cannot produce further drag movement or resume. Its output cleanup may remain pending.
@@ -41,7 +42,7 @@ The team must resolve timing details and compare observable behavior with macOS 
 - **Tap candidate:** A fresh single valid contact after all valid contacts have lifted during the drag's grace period.
 - **Tap displacement:** The straight-line distance from the candidate's initial contact position, measured in touchpad millimeters.
 - **Supported environment:** Arch Linux or CachyOS with Hyprland on Wayland and a compatible touchpad.
-- **Drag failure:** Touchpad disconnection, missing or revoked permissions, or loss of the desktop connection.
+- **Drag failure:** Touchpad disconnection, missing or revoked permissions, desktop connection loss, input synchronization loss, or output-write failure.
 - **Valid contact:** A finger contact, including a thumb, that is not a detected palm. Contact counts refer to valid contacts.
 - **Group position:** The arithmetic average of the three valid contacts' positions on the touchpad.
 - **Start baseline:** The group position when exactly three valid contacts form the current group, before a drag starts.
@@ -128,7 +129,12 @@ Coverage: RF-1, RF-2, RF-5, RF-7, and RF-9.
 All selection failures preserve normal touchpad handling. Configuration changes during a drag cannot change its thresholds or deadlines.
 Conversion bounds refine the positive finite-number rules throughout this specification.
 The implementation must document its supported numeric ranges and report them for conversion failures.
-Runtime device loss still follows RF-9. This startup policy does not define device replacement during execution.
+Runtime device loss follows RF-9 and the same-device recovery rules below.
+
+- WHEN the selected touchpad disconnects, the utility SHALL retain that device selection and apply RF-9 cleanup.
+- WHILE the selected touchpad is absent, the utility SHALL wait for that same device without selecting a substitute.
+- WHEN the same compatible device returns, the utility SHALL recover only after cleanup and readiness checks pass.
+- WHEN changing the selected touchpad, the user SHALL change configuration and restart the utility.
 
 ### RF-2: Start a drag
 
@@ -179,6 +185,10 @@ Invalid configuration fails startup under RF-1. RF-6 uses this same threshold fo
 All arming criteria include released physical buttons on the selected touchpad.
 Arming permits subsequent fresh contacts to form a gesture. Readiness does not require zero contacts throughout recognition.
 Runtime enable and disable commands do not rewrite startup configuration.
+
+- WHEN enablement is requested while already enabled, the utility SHALL preserve any active gesture without resetting its recognition state.
+- WHEN disablement is requested while already disabled, the utility SHALL preserve the disabled state without generating additional button events.
+- WHEN enable, disable, or cancel commands repeat, the utility SHALL preserve any pending-cleanup obligation.
 
 ### RF-3: Move during a drag
 
@@ -241,6 +251,10 @@ Target disappearance does not guarantee undo. The utility does not restore the c
 - IF the configured grace duration is zero, negative, nonnumeric, or nonfinite, THEN the utility SHALL reject that value.
 
 These criteria cover zero, one, two, or more than three contacts.
+- WHEN a valid contact-count change is reported, the utility SHALL apply it without an additional debounce delay.
+- WHEN even a brief departure from three valid contacts occurs during dragging, the utility SHALL start grace under RF-5.
+
+Returning contacts follow RF-6. Detected palms remain excluded from the valid count.
 Further changes, including lifting all remaining fingers, do not restart or extend the timer.
 After successful continuation, a later departure from three starts a new grace period with a new deadline.
 The default requires comparison with macOS. RF-1 rejects invalid configuration and applies file changes only after restart.
@@ -278,6 +292,14 @@ Contact changes reset the continuation baseline without changing the deadline. D
 Movement at or after the deadline cannot continue the expired drag.
 Contacts remaining after normal completion cannot start another drag until all valid contacts lift.
 
+#### Simultaneous termination and movement
+
+- WHEN a termination event coincides with qualifying movement, the utility SHALL prevent that movement from starting or continuing a drag.
+- WHEN simultaneous events terminate the same gesture, the utility SHALL avoid duplicate successful releases while preserving required cleanup retries.
+
+Termination events include failure, lock, suspend preparation, exit, disablement, cancellation, and a selected-touchpad physical press.
+RF-7's grace-expiry priority still applies. RF-7's physical-button consumption rules still apply to presses that terminate a gesture.
+
 #### Physical-button termination and explicit cancellation
 
 - WHILE dragging or in grace, WHEN a selected-touchpad physical button is pressed, the utility SHALL terminate the gesture immediately.
@@ -286,6 +308,7 @@ Contacts remaining after normal completion cannot start another drag until all v
 - WHILE running, the utility SHALL provide an explicit cancel command for the current gesture.
 - WHEN cancellation is requested during dragging or grace, the utility SHALL stop movement, cancel timers, and release its held button.
 - WHEN the user cancels a gesture, the utility SHALL preserve the feature's requested enablement state.
+- WHEN cancellation is requested without an active gesture, the utility SHALL preserve enablement and generate no button events.
 - WHEN physical-button termination or explicit cancellation occurs, the utility SHALL require fresh contacts under RF-2's rearming rules.
 - IF release fails during either termination, THEN the utility SHALL apply RF-9's pending-cleanup rules.
 
@@ -309,6 +332,7 @@ Neither cancellation nor physical-button termination guarantees undo.
 - WHEN evaluating either tap limit, the utility SHALL accept equality with that limit.
 - WHEN a tap candidate touches down, the utility SHALL preserve the existing grace-period deadline.
 - IF grace expiry precedes candidate lift, THEN the utility SHALL end the drag through expiry without recognizing an ending tap.
+- WHEN grace expires with a tap candidate still down, the utility SHALL consume its later lift without generating an ordinary click.
 - WHERE no ending-tap duration limit is configured, the utility SHALL use 200 ms.
 - WHERE no ending-tap movement limit is configured, the utility SHALL use 1 mm.
 - WHEN reading configuration, the utility SHALL accept independent ending-tap duration and movement limits as finite numbers greater than zero.
@@ -318,6 +342,7 @@ Both touchdown and lift must occur during the grace period, before its expiry.
 A remaining drag finger cannot become a tap candidate without first lifting.
 Exceeding a movement limit cancels the candidate even if the finger returns to its initial position.
 Canceling a candidate does not itself end the drag. The existing drag and grace-period rules still apply.
+The late lift completes the old contact sequence. Rearming still requires all readiness checks, including zero valid contacts.
 Duration uses milliseconds. Movement uses millimeters and remains independent of the drag-start threshold.
 The defaults require comparison with macOS before an equivalence claim.
 Expiry takes priority when candidate lift coincides exactly with the grace deadline.
@@ -370,6 +395,8 @@ Three-finger gesture reservation applies only to the selected touchpad. Contacts
 - WHEN access returns and cleanup completes, the utility SHALL automatically prepare enabled dragging for fresh contacts.
 - WHILE the user has explicitly disabled dragging, the utility SHALL prevent automatic recovery from enabling it.
 - WHEN recovery prerequisites hold, the utility SHALL require an observed zero-contact state before arming a new gesture.
+- IF contact state becomes unreliable or output cannot be delivered, THEN the utility SHALL terminate the gesture and apply pending cleanup.
+- WHEN recovering after synchronization loss or output failure, the utility SHALL require reliable state and fresh-contact readiness checks.
 
 Ending a failed drag does not undo actions that an application already completed.
 Failure termination and output cleanup are separate outcomes. Unconfirmed loss is not proof that a held button no longer exists.
@@ -402,13 +429,13 @@ Acceptance tests must verify those system outcomes. They must not assume success
 
 ## Non-functional requirements
 
-- **NFR-1: Behavior match.** Compare macOS outcomes for drag start, repositioning, continuation, tap-to-end, and release. Review every mismatch before claiming equivalence.
+- **NFR-1: Behavior match.** Compare macOS outcomes for drag start, repositioning, continuation, tap-to-end, and release. Unresolved behavioral mismatches block release.
 - **NFR-2: Responsiveness and motion.** Meet the timing limits, measurement conditions, and ordinary-pointing tolerances below.
-- **NFR-3: Verification.** Use deterministic tests for gesture transitions and timing. Test desktop interactions on both supported distributions.
+- **NFR-3: Verification.** Use deterministic unit tests for gesture transitions and timing. Use integration tests for backend interactions on both supported distributions.
 - **NFR-4: Regression prevention.** Add regression tests for defect fixes. Run applicable tests before completion.
-- **NFR-5: Privacy.** Keep gesture state transient. Never persist input events.
-- **NFR-6: Persistence.** Persist only explicit user configuration. An interrupted configuration save must preserve a complete valid configuration.
-- **NFR-7: Language.** Use English for documentation, messages, and errors.
+- **NFR-5: Privacy.** Keep gesture state in memory. Never persist input events.
+- **NFR-6: Persistence.** Persist only explicit configuration in the XDG configuration directory, using atomic writes. Interrupted saves must preserve complete valid configuration.
+- **NFR-7: Language.** Use English for identifiers, comments, documentation, messages, and errors.
 - **NFR-8: Errors.** Error messages must identify the failed operation and cause. Include actionable guidance where available.
 
 ### Responsiveness and comparison acceptance
@@ -459,11 +486,23 @@ Exclude discarded threshold-crossing movement from the active-motion comparison.
 Use the same interaction scenarios for native macOS outcome comparisons under T09's fixed baseline.
 Report macOS timing differences separately. They do not replace the approved Linux timing limits.
 Linux sensitivity remains relative to ordinary Linux pointing, as T04 requires.
+Review alone does not establish macOS equivalence. Resolve behavioral mismatches before release under the current constitution.
+Accepting different behavior requires explicit changes to both the constitution and specification first.
+Timing differences remain subject to T10's separate timing rules.
 
 ## Limit cases
 
 | Case | Required result |
 | --- | --- |
+| The selected touchpad disconnects and another compatible device is present | Apply cleanup and wait for the same device. Do not substitute the other device. |
+| The same compatible touchpad returns | Recover only after cleanup, reliable-state, and readiness checks pass. |
+| A valid contact-count change lasts only briefly | Apply it immediately without added debounce. Returning contacts follow continuation rules. |
+| A termination event coincides with qualifying movement | Termination prevents drag start or continuation at that timestamp. |
+| Input synchronization is lost or an output write fails | Terminate and apply pending cleanup. Recover only with reliable state and fresh contacts. |
+| Enable repeats while a drag is active | Preserve the drag and recognition state. |
+| Disable repeats while already disabled | Remain disabled without additional button events. |
+| Cancel arrives with no active gesture | Preserve enablement and generate no button events. Do not clear pending cleanup. |
+| A tap candidate lifts after grace already expired | Consume the lift without an ordinary click or another drag release. Apply normal rearming checks. |
 | Configuration is missing or a setting is omitted | Use the applicable defaults without creating or rewriting configuration. |
 | Existing configuration is unreadable, malformed, or invalid | Fail startup with an actionable English error. Preserve normal touchpad handling. |
 | A setting repeats, has an unknown name, or uses a string instead of its required type | Reject configuration rather than infer or convert a value. |
@@ -581,11 +620,14 @@ Linux sensitivity remains relative to ordinary Linux pointing, as T04 requires.
 - Privacy and configuration checks satisfy NFR-5 and NFR-6.
 - Configuration checks verify defaults, strict validation, conversion bounds, restart-only changes, and unambiguous touchpad selection.
 - Documentation, messages, and errors satisfy NFR-7 and NFR-8.
-- The macOS comparison records gesture outcomes and separate timing differences. Every behavioral mismatch receives review before any equivalence claim.
+- The macOS comparison records gesture outcomes and separate timing differences. No unresolved behavioral mismatch remains at release.
+- Different accepted behavior requires explicit constitution and specification changes before release. Review alone cannot waive equivalence.
+- Tests cover same-device recovery, immediate contact transitions, simultaneous termination, repeated commands, and late tap-lift consumption.
 - The team resolves release-blocking questions. The user explicitly accepts any deferred questions.
 
 ## Resolved decisions
 
+- **T12:** Same-device recovery, termination priority, immediate contact transitions, failure coverage, repeated commands, and late tap-lift rules complete the consistency review.
 - **T11:** RF-1 defines defaults, strict validation, restart-only configuration, and explicit or unambiguous automatic touchpad selection.
 - **OQ-1 (T03):** Default to a configurable 300 ms grace period. Accept only finite numeric durations greater than zero.
 - **OQ-2 (T02):** Use a fresh one-finger tap, recognized on lift. RF-7 defines configurable 200 ms and 1 mm limits.
@@ -602,4 +644,5 @@ Linux sensitivity remains relative to ordinary Linux pointing, as T04 requires.
 
 ## [OPEN QUESTIONS]
 
-- **T12:** Review remaining consistency gaps, including runtime device replacement and switching, before implementation.
+No product-behavior questions remain from T01 through T12.
+Backend feasibility and actual acceptance results remain unverified. Technical contracts must document numeric ranges and device identity before implementation uses them.

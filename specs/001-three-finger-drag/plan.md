@@ -16,7 +16,6 @@ The input backend remains provisional until its feasibility checks pass.
 | Decision | Required clarification | Coverage |
 | --- | --- | --- |
 | Pointer verification | Define numerical tolerances and response limits for T04's ordinary-pointing match. | RF-3, RF-6, OQ-9 |
-| Compatibility | Select touchpads, Hyprland versions, applications, window states, and the macOS reference. | RF-1, RF-4, OQ-8 |
 | Configuration | Define remaining settings and invalid-configuration behavior. T01 through T03 approve drag-start, ending-tap, and grace settings. | RF-1, RF-2, RF-5, RF-7, RF-9 |
 
 The specification must also address contact noise.
@@ -176,6 +175,27 @@ Coverage: RF-4, RF-8, and RF-9.
 Target disappearance does not select a replacement target or guarantee undo.
 System cleanup after process death requires observed integration evidence, not assumptions about finalizers or shutdown handlers.
 
+### Approved T09 decisions
+
+Coverage: RF-1, RF-4, and RF-8. Specification reference: resolved OQ-8 and RF-1's compatibility baseline.
+
+- Support native Wayland and XWayland applications within Hyprland. Standalone X11 sessions remain outside the MVP.
+- Require separate positions and stable identities for at least three contacts, plus detection of a fourth contact.
+- Require physical axis resolution for millimeter measurements and sufficient contact information for palm rejection.
+- Defer hardware that lacks any required capability. Do not infer compatibility from a model name alone.
+- Use fully updated stable Arch Linux and CachyOS installations when acceptance testing begins.
+- Record exact kernel, Hyprland, libinput, XWayland, and application versions. Keep them fixed for each acceptance run.
+- Exclude development builds from the acceptance baseline.
+- Use Thunar for file dragging and Mousepad for text selection and draggable title bars under both application backends.
+- Verify the actual backend of each tested application instance.
+- Test floating title-bar movement. Other window states follow ordinary Hyprland primary-button drag behavior without forced state changes.
+- Use native macOS three-finger dragging on one compatible Mac, with fixed model, trackpad, macOS build, and settings.
+- Use Finder for reference file dragging and TextEdit for reference text selection and title-bar movement.
+
+T13 records actual hardware and software inventories before acceptance runs. T09 approves the selection policy, not test results.
+Apple's guide establishes feature enablement. It does not supply numerical drag thresholds or prove compatibility by model year.
+The macOS reference remains native behavior rather than another utility's approximation.
+
 ## 2. Module structure
 
 Use one Go module with Go 1.27.1 or later, as required by the repository.
@@ -262,7 +282,8 @@ Identify the evidence used to confirm cleanup. A disconnected control channel is
 
 If these checks fail, revise the backend decision before implementation proceeds.
 Do not claim that the proxy already preserves every libinput behavior.
-The touchpad acceptance baseline must verify palm detection, thumb inclusion, and partial-multitouch hardware support.
+The touchpad acceptance baseline must verify palm rejection, thumb inclusion, and three independently tracked contacts with stable identities.
+Require fourth-contact detection and physical axis resolution. Defer partial-multitouch devices that cannot satisfy these requirements.
 It must also verify contact identities and axis resolution for millimeter measurements.
 Verify logical primary-button behavior with both standard and left-handed mappings.
 
@@ -869,6 +890,28 @@ Run actual crash and forced-termination tests from an external observer in the i
 Verify both button state and ordinary pointing and scrolling after process death, independently of any later utility restart.
 Record aggregate results and scenario outcomes without captured input-event streams.
 
+### T09 baseline verification
+
+Coverage: RF-1, RF-4, and RF-8. T13 records inventories before these acceptance checks run.
+
+| Baseline item | Required evidence |
+| --- | --- |
+| Linux environments | Fully updated stable Arch Linux and CachyOS, with exact kernel, Hyprland, libinput, XWayland, and application versions. |
+| Linux hardware | Device identity, three independent contact positions and identities, fourth-contact detection, axis resolution, and palm-rejection information. |
+| Native Wayland applications | Thunar file dragging and Mousepad selection and title-bar scenarios, with verified backend identity. |
+| XWayland applications | The same scenarios inside Hyprland, with verified backend identity. |
+| Window states | Floating title-bar movement and comparison with ordinary primary-button behavior in tiled, maximized, and fullscreen states. |
+| macOS environment | One compatible Mac's model, trackpad, macOS build, and relevant settings, with three-finger dragging enabled. |
+| macOS applications | Finder file dragging and TextEdit selection and title-bar scenarios. |
+| Run consistency | Fixed Linux versions per acceptance run and fixed Mac hardware, software, and settings throughout comparison. |
+
+Each Linux application/backend combination must run on both distributions.
+Verify the actual backend rather than relying solely on launch arguments or environment variables.
+If an application cannot run under a required backend, record the blocker rather than claiming that matrix entry passed.
+Use ordinary primary-button title-bar dragging as the baseline for each tested window state.
+No utility-driven window-state transition is required to overcome desktop movement restrictions.
+Record inventories and aggregate outcomes without persisting input events.
+
 ### Adapter integration tests
 
 Coverage: RF-1 through RF-9.
@@ -889,8 +932,10 @@ Verify device cleanup after graceful exit and forced process termination.
 Coverage: RF-1 through RF-9, NFR-1, and NFR-2.
 
 Run the full acceptance suite on Arch Linux and CachyOS with the agreed Hyprland versions.
-Use the touchpads and representative applications selected under OQ-8.
-Include each approved window state and application type.
+Use touchpads that meet RF-1's capabilities and the exact inventories recorded under T13.
+Run Thunar file dragging and Mousepad text-selection and title-bar checks under native Wayland and XWayland on both distributions.
+Verify application backends and test the approved window states against ordinary primary-button behavior.
+Freeze exact software versions for each run. Record a changed environment as a new run rather than mixing its evidence.
 
 | Requirement | Desktop evidence |
 | --- | --- |
@@ -905,6 +950,8 @@ Include each approved window state and application type.
 | RF-9 | Disconnection, permission loss, and desktop loss terminate the gesture and satisfy the approved release policy. |
 
 Compare the same authored interaction scripts with the selected macOS reference.
+Use Finder and TextEdit with native three-finger dragging enabled.
+Keep the recorded Mac model, trackpad, macOS build, and relevant settings fixed throughout the comparison.
 Store scenario descriptions, aggregate timings, and pass/fail results only.
 Do not capture or persist input-event streams.
 Response-time acceptance remains blocked until OQ-9 defines its limits.
@@ -951,6 +998,8 @@ When repository files are added, update the project tree in `README.md`.
 After code changes, run the required tests and `graphify update .`.
 
 ## 9. Technical references
+
+- [Apple three-finger drag enablement](https://support.apple.com/en-us/102341)
 
 Coverage: RF-1, RF-5, RF-7, RF-8, RF-9.
 

@@ -38,7 +38,7 @@ These tasks capture user decisions. They do not select new behavior without appr
 | T06 | Define enablement, recovery, and rearming. | RF-2, RF-7, RF-8, RF-9 | 25 min | T05 | Made when: Approved criteria cover startup, disablement, recovery, fresh contacts, and contacts remaining after expiry. Evidence: [T06 decisions](#t06-completion-evidence). | done |
 | T07 | Define physical-button and other-device interactions. | RF-3, RF-7, RF-8, RF-9 | 25 min | T04, T06 | Made when: Approved criteria cover physical buttons, other pointers, multiple touchpads, duplicate instances, and explicit cancellation. Evidence: [T07 decisions](#t07-completion-evidence). | done |
 | T08 | Define lifecycle and desktop interruption behavior. | RF-4, RF-8, RF-9 | 25 min | T05, T06 | Made when: Approved criteria cover exit, crash, lock, suspend, session loss, monitor changes, and target-window disappearance. Evidence: [T08 decisions](#t08-completion-evidence). | done |
-| T09 | Select the compatibility and macOS baseline. | RF-1, RF-4, RF-8 | 25 min | None | Made when: The user approves device capabilities, versions, applications, XWayland scope, window states, and the macOS reference. | - |
+| T09 | Select the compatibility and macOS baseline. | RF-1, RF-4, RF-8 | 25 min | None | Made when: The user approves device capabilities, versions, applications, XWayland scope, window states, and the macOS reference. Evidence: [T09 decisions](#t09-completion-evidence). | done |
 | T10 | Define measurable responsiveness and comparison rules. | RF-2, RF-3, RF-6, RF-7, RF-9 | 25 min | T03, T04, T09 | Made when: Approved limits and measurement methods cover start, motion, continuation, release, and recoverable failure cleanup. | - |
 | T11 | Define explicit configuration behavior. | RF-1, RF-5, RF-7, RF-9 | 20 min | T03, T06 | Made when: Approved settings have defaults, bounds, missing-file behavior, invalid-value behavior, and rules for changes during a drag. | - |
 | T12 | Complete the specification consistency review. | RF-1 through RF-9 | 30 min | T01 through T11 | Made when: RF contradictions are resolved, release-blocking questions are closed, and completion criteria preserve the constitution. | - |
@@ -190,6 +190,25 @@ The user approved these decisions in the T08 clarification discussion:
 Evidence: [RF-4 desktop changes](spec.md#desktop-changes-during-a-drag), [RF-9 lifecycle interruptions](spec.md#lifecycle-interruptions), and [plan decisions](plan.md#approved-t08-decisions).
 The [T08 acceptance scenarios](plan.md#t08-acceptance-scenarios) define future verification. T08 completes specification decisions, not implementation testing.
 
+### T09 completion evidence
+
+The user approved these decisions in the T09 clarification discussion:
+
+- Support native Wayland and XWayland applications within Hyprland. Exclude standalone X11 sessions.
+- Require separate positions and stable identities for three contacts, fourth-contact detection, physical axis resolution, and palm-rejection information.
+- Defer hardware that lacks these capabilities.
+- Use fully updated stable Arch Linux and CachyOS installations when acceptance testing begins.
+- Record exact kernel, Hyprland, libinput, XWayland, and application versions. Keep them fixed per run and exclude development builds.
+- Use Thunar for file dragging and Mousepad for text selection and draggable title bars. Verify actual application backends.
+- Require movement wherever an ordinary primary-button title-bar drag works. Do not force window-state changes.
+- Select one compatible Mac with native three-finger dragging enabled.
+- Record and fix its model, trackpad, macOS build, and settings throughout comparison.
+- Use Finder for file dragging and TextEdit for text selection and title-bar movement.
+
+Evidence: [RF-1 baseline](spec.md#compatibility-and-acceptance-baseline), [RF-4](spec.md#rf-4-drag-files-select-text-and-move-windows), and [resolved OQ-8](spec.md#resolved-decisions).
+The [plan decisions](plan.md#approved-t09-decisions) and [baseline verification](plan.md#t09-baseline-verification) define the acceptance policy.
+T13 will record actual environments. T09 completes baseline decisions, not compatibility tests or macOS measurements.
+
 ## 2. Establish backend feasibility
 
 Prepare existing Arch Linux, CachyOS, and macOS test environments before these tasks.
@@ -202,7 +221,7 @@ If an experiment needs more work, add a bounded follow-up task and update T29's 
 
 | Task | Description | RF coverage | Time | Depends on | Completion criteria | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| T13 | Check the prepared test environments. | RF-1, RF-4 | 20 min | T09 | Made when: Version inventories confirm access to both Linux sessions, selected devices, applications, and the macOS reference. | - |
+| T13 | Check the prepared test environments. | RF-1, RF-4 | 20 min | T09 | Made when: Inventories record T09's exact Linux versions, touchpad capabilities, application backends, and fixed Mac hardware, build, and settings. | - |
 | T14 | Define the native adapter API and dependency. | RF-1, RF-8, RF-9 | 25 min | T12 | Made when: The plan lists the required libevdev calls, version constraints, ownership rules, and dependency justification. | - |
 | T15 | Establish a bounded experiment harness. | RF-1, RF-8, RF-9 | 30 min | T13, T14 | Made when: The harness can open and close one synthetic device without recording input or capturing unrelated devices. | - |
 | T16 | Probe virtual-touchpad recognition. | RF-1, RF-8 | 25 min | T15 | Made when: Evidence records Hyprland recognition, seat assignment, capabilities, axis ranges, resolution, and applicable settings. | - |

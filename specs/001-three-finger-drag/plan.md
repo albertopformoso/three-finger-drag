@@ -15,10 +15,10 @@ The input backend remains provisional until its feasibility checks pass.
 
 | Decision | Required clarification | Coverage |
 | --- | --- | --- |
-| Configuration | Define remaining settings and invalid-configuration behavior. T01 through T03 approve drag-start, ending-tap, and grace settings. | RF-1, RF-2, RF-5, RF-7, RF-9 |
+| Runtime device changes | Review device replacement and switching during execution. T11 defines startup selection. | RF-1, RF-8, RF-9 |
 
 The specification must also address contact noise.
-Device-selection and switching details still require specification decisions.
+Runtime device replacement and switching still require specification review under T12.
 
 The completion criteria must preserve the constitution's macOS-equivalence requirement.
 User acceptance of unspecified differences does not establish equivalence.
@@ -40,7 +40,7 @@ Coverage: RF-2 and RF-3. Specification reference: RF-2 and resolved OQ-3.
 - Reject zero, negative, nonnumeric, and nonfinite thresholds.
 
 The default still requires macOS comparison. T04 matches ordinary pointing and discards movement through the threshold-crossing event.
-T11 defines invalid-configuration recovery and configuration changes during a drag.
+T11 rejects invalid configuration at startup and applies file changes only after restart.
 T03 uses the same displacement threshold for grace-period continuation.
 
 ### Approved T02 decisions
@@ -60,7 +60,7 @@ Coverage: RF-7. Specification reference: ending-tap recognition and resolved OQ-
 - Consume a recognized ending tap and release the held drag without an additional click.
 
 Expiry takes priority over lift exactly at the grace deadline. Candidate cancellation alone does not release the drag.
-T11 defines invalid-configuration recovery and configuration changes during a drag.
+T11 rejects invalid configuration at startup and applies file changes only after restart.
 Both defaults require comparison with macOS.
 
 ### Approved T03 decisions
@@ -78,7 +78,7 @@ Coverage: RF-5, RF-6, and RF-7. Specification references: resolved OQ-1 and OQ-4
 - At the exact deadline, expiry takes priority over qualifying movement and candidate lift. Release once.
 
 T04 discards movement through the continuation threshold-crossing event. T06 requires zero contacts before rearming after expiry.
-T11 defines configuration changes during a drag and invalid-configuration recovery.
+T11 keeps loaded settings fixed until restart and rejects invalid configuration at startup.
 The 300 ms default requires comparison with macOS.
 
 ### Approved T04 decisions
@@ -216,6 +216,25 @@ Coverage: RF-2, RF-3, RF-6, RF-7, and RF-9. Specification reference: NFR-2 and r
 - Retain aggregates and measurement details only. Do not persist captured input-event streams or per-event runtime records.
 
 These are approved targets, not benchmark results. The Linux latency limits remain independent of macOS timing measurements.
+
+### Approved T11 decisions
+
+Coverage: RF-1, RF-2, RF-5, RF-7, and RF-9.
+
+- Missing configuration and omitted settings use the approved defaults without creating a file.
+- Default to enabled startup, a 1 mm drag threshold, 300 ms grace, and ending-tap limits of 200 ms and 1 mm.
+- Fail startup for unreadable, malformed, or invalid existing configuration. Preserve normal touchpad handling.
+- Report the file, cause, and setting when possible, with corrective guidance. Do not replace invalid values with defaults.
+- Reject unknown or duplicate fields, unsupported versions, and incorrect types. Do not coerce numeric or Boolean strings.
+- Default an omitted version to 1. Accept only an explicit integer 1.
+- Reject numeric conversion overflow or rounding to zero, report the supported range, and do not clamp.
+- Read file changes only at restart. Keep runtime enable, disable, and cancel commands independent of file changes.
+- Allow explicit touchpad selection. Select automatically only if exactly one compatible touchpad exists.
+- Fail ambiguous automatic selection and list the choices. Fail missing or incompatible explicit selection without substitution.
+- Fail startup when no compatible touchpad exists. Preserve normal handling on all selection failures.
+
+Numeric representations and their exact supported ranges belong to implementation design and must be documented before validation tests.
+The startup-selection policy does not authorize automatic substitution after runtime device loss.
 
 ## 2. Module structure
 
@@ -385,8 +404,14 @@ An explicit `false` requests disabled startup. Apply strict JSON validation to t
 Runtime enable and disable commands change only an in-memory override.
 On restart, discard the override and read the configured startup state again.
 
-Reject unknown fields and unsupported schema versions with English errors.
-The specification must define whether invalid configuration stops startup or selects an approved fallback.
+Use `schema_version` with default 1 when omitted. Accept only an explicit integer 1.
+Reject unknown fields, duplicate fields, unsupported versions, and wrong value types with English errors.
+Distinguish a missing file from unreadable or malformed existing configuration.
+Use defaults only for a missing file or absent fields. An empty or malformed existing document is not missing configuration.
+Fail startup on invalid configuration before device acquisition, leaving normal touchpad handling intact.
+Include the file, cause, and field when possible, with corrective guidance.
+Check for duplicate object members before decoding into records. Unknown-field rejection alone does not detect duplicates.
+Retain one validated settings snapshot for the process lifetime. Do not watch or reload the file during execution.
 Use `grace_period_ms` for the grace duration, with a default of 300 ms when absent.
 Accept only finite JSON numbers greater than zero. Reject zero, negative, nonnumeric, and nonfinite values.
 Do not write the implicit default to disk.
@@ -404,6 +429,19 @@ Resolve each absent setting independently. Do not write implicit defaults to dis
 Apply the same finite, positive JSON-number validation to each setting.
 Keep these limits independent of `drag_start_threshold_mm`.
 Supply validated limits to the gesture package through policy values.
+
+Validate numeric conversion as well as type, positivity, and finiteness.
+Reject overflow and values that round to zero in the destination representation. Never clamp them or substitute defaults.
+Document the supported range for each destination representation and include it in conversion-error messages.
+Preserve the original numeric value through validation sufficiently to detect conversion overflow or underflow.
+
+Use the optional `touchpad` setting for explicit device identification.
+The adapter's identifier format must distinguish one compatible physical touchpad and support useful candidate listings.
+If omitted, enumerate compatible devices and accept only a single candidate.
+Report multiple candidates as an error with choices. Report zero candidates as an error.
+For explicit selection, report a missing or incompatible match without selecting another device.
+Validate selection before grabbing any touchpad or replacing ordinary input routing.
+Changes to this setting apply only at restart, like other configuration-file changes.
 
 Atomic save procedure:
 
@@ -434,8 +472,8 @@ If another instance owns the session, report an English error and exit without c
 Use atomic ownership acquisition so simultaneous starts cannot both succeed.
 Control commands connect to the owner instead of acquiring ownership or starting another gesture-processing instance.
 
-1. Read explicit configuration and validate approved settings.
-2. Check the supported session, selected device, required access, and output capabilities.
+1. Read configuration once. Apply defaults for missing fields and validate the complete settings snapshot.
+2. Resolve explicit selection or require exactly one compatible touchpad. Check session, access, and output capabilities.
 3. Prepare virtual devices and verify desktop recognition before routing input.
 4. Acquire exclusive input ownership through the verified backend procedure.
 5. Read requested enablement from startup configuration. Clear any runtime override and initialize recognition as unarmed.
@@ -745,7 +783,7 @@ Unless stated otherwise, use default limits and a grace deadline later than the 
 | Duration is configured to 300 ms and displacement to 2 mm | Accept 300 ms and 2 mm. Reject values exceeding either configured limit. |
 | Only one ending-tap setting is present | Use that value and the independent default for the other setting. |
 | The drag-start threshold changes | Ending-tap limits remain unchanged. |
-| Either tap setting is zero, negative, nonnumeric, or nonfinite | Reject the value. Configuration recovery remains pending T11. |
+| Either tap setting is zero, negative, nonnumeric, or nonfinite | Reject configuration and fail startup before taking device control. |
 
 Use synthetic coordinates and injected monotonic time for boundary checks.
 Verify that canceled candidates cannot emit ending-tap results when their original contact later lifts.
@@ -760,7 +798,7 @@ Times below are relative to the first interruption.
 | --- | --- |
 | No grace setting is present | Use 300 ms without writing configuration. |
 | Grace duration is configured to 500 ms | Set the deadline 500 ms after the interruption. |
-| Grace duration is zero, negative, nonnumeric, or nonfinite | Reject the value. Configuration recovery remains pending T11. |
+| Grace duration is zero, negative, nonnumeric, or nonfinite | Reject configuration and fail startup before taking device control. |
 | Dragging changes from three contacts to zero, one, two, or four | Pause movement and set one deadline at 300 ms. |
 | Two remaining contacts lift at 100 ms | Preserve the original 300 ms deadline. |
 | Contacts repeatedly change during grace | Reset affected continuation baselines without extending the deadline. |
@@ -980,6 +1018,35 @@ Check direction separately and preserve the no-repositioning-jump requirement.
 Use Finder and TextEdit for the fixed macOS comparison. Report timing differences separately from outcome matching.
 Linux pointer mapping remains relative to ordinary one-finger Linux pointing rather than identical screen travel on different hardware.
 Persist neither raw input events nor pointer paths as measurement evidence.
+
+### T11 acceptance scenarios
+
+Coverage: RF-1, RF-2, RF-5, RF-7, and RF-9. These scenarios define future tests, not executed implementation tests.
+
+| Scenario | Expected result |
+| --- | --- |
+| No configuration file exists | Use approved defaults without creating a file. |
+| The document contains only one valid setting | Use that value and defaults for omitted settings. |
+| Version is omitted or is integer 1 | Accept the version. |
+| Version is unsupported or has the wrong type | Fail startup with the file, field, and reason. |
+| Existing configuration is unreadable, empty, or malformed | Fail startup before device control. Preserve normal touchpad handling. |
+| A field is unknown or repeated, even with identical values | Reject configuration. Do not silently choose a value. |
+| A Boolean or numeric field contains a string or null | Reject configuration without coercion. |
+| A numeric setting is zero, negative, nonfinite, or nonnumeric | Reject configuration without substituting its default. |
+| A positive finite value overflows or rounds to zero during conversion | Reject it and report the supported range without clamping. |
+| A valid positive value fits the documented conversion bounds | Accept it. Test representable boundary values separately for each setting. |
+| Configuration changes during dragging, grace, or idle operation | Preserve the loaded snapshot and existing deadlines until restart. |
+| A runtime command executes after the file changes | Apply the command under current runtime rules without reloading configuration. |
+| The process restarts after a configuration edit | Validate and apply the new file, independently of the previous runtime override. |
+| Selection is omitted and one compatible touchpad exists | Select that device. |
+| Selection is omitted and multiple compatible devices exist | Fail startup and list candidates without taking device control. |
+| No compatible touchpad exists | Fail startup and preserve normal touchpad handling. |
+| An explicit device is missing or incompatible while another is compatible | Fail with the selection and reason. Do not substitute the other device. |
+| One explicit compatible device matches among multiple candidates | Select only that device. |
+
+Use temporary configuration files and synthetic device inventories for deterministic tests.
+Verify no device grab occurs after configuration or selection validation fails.
+Keep exact representation bounds and selector format in the implementation contract, not guessed runtime fallback behavior.
 
 ### Adapter integration tests
 

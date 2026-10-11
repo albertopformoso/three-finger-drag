@@ -93,6 +93,43 @@ Enable three-finger dragging according to [Apple's instructions](https://support
 Use Finder for file dragging and TextEdit for text selection and draggable title-bar movement.
 T13 records the actual Linux devices and Mac environment before acceptance testing.
 
+#### Configuration and touchpad selection
+
+Coverage: RF-1, RF-2, RF-5, RF-7, and RF-9.
+
+| Setting | Default | Accepted values |
+| --- | --- | --- |
+| Configuration version | 1 | Integer 1 only |
+| Enabled startup | Enabled | Boolean |
+| Drag-start and continuation threshold | 1 mm | Finite positive number, subject to conversion bounds |
+| Grace duration | 300 ms | Finite positive number, subject to conversion bounds |
+| Ending-tap duration limit | 200 ms | Finite positive number, subject to conversion bounds |
+| Ending-tap displacement limit | 1 mm | Finite positive number, subject to conversion bounds |
+| Touchpad selection | Automatic when exactly one compatible touchpad exists | Explicit identification of one compatible touchpad |
+
+- IF the configuration file is missing, THEN the utility SHALL use defaults without creating a file.
+- WHEN a setting is omitted, the utility SHALL use that setting's default without writing it to disk.
+- IF existing configuration is unreadable, malformed, or invalid, THEN the utility SHALL fail startup while preserving normal touchpad handling.
+- WHEN reporting configuration failure, the utility SHALL identify the file and cause, and the setting when possible, in English.
+- WHEN reporting configuration failure, the utility SHALL include available corrective guidance without silently substituting defaults for invalid values.
+- IF configuration contains unknown or duplicate settings or an unsupported version, THEN the utility SHALL reject it.
+- WHEN validating configuration, the utility SHALL require actual Boolean and numeric values without converting strings.
+- IF a numeric value overflows or rounds to zero during conversion, THEN the utility SHALL reject it and report the supported range.
+- WHEN validating numeric settings, the utility SHALL reject invalid values rather than silently clamp them.
+- WHEN configuration changes during execution, the utility SHALL retain its loaded settings until restart.
+- WHEN the utility restarts, the utility SHALL read and validate configuration before taking control of the touchpad.
+- WHILE running, the utility SHALL continue to apply enable, disable, and cancel commands under their existing rules.
+- WHERE an explicit touchpad selection exists, the utility SHALL select that compatible device without substituting another.
+- IF the selected device is missing or incompatible, THEN the utility SHALL fail startup and report the selection and reason.
+- WHERE selection is omitted and exactly one compatible touchpad exists, the utility SHALL select it automatically.
+- IF selection is omitted and multiple compatible touchpads exist, THEN the utility SHALL fail startup and list the choices.
+- IF no compatible touchpad exists, THEN the utility SHALL fail startup while preserving normal touchpad handling.
+
+All selection failures preserve normal touchpad handling. Configuration changes during a drag cannot change its thresholds or deadlines.
+Conversion bounds refine the positive finite-number rules throughout this specification.
+The implementation must document its supported numeric ranges and report them for conversion failures.
+Runtime device loss still follows RF-9. This startup policy does not define device replacement during execution.
+
 ### RF-2: Start a drag
 
 - WHILE ready, WHEN qualifying start movement occurs, the utility SHALL start a drag at the current pointer position.
@@ -117,7 +154,7 @@ T13 records the actual Linux devices and Mac environment before acceptance testi
 The threshold applies in every direction and measures touchpad distance, not screen distance.
 Detected palms do not change the valid contact count, group position, or baseline.
 The 1 mm default requires comparison with macOS before any equivalence claim.
-Invalid-configuration recovery remains open under T11. RF-6 uses this same threshold for continuation.
+Invalid configuration fails startup under RF-1. RF-6 uses this same threshold for continuation.
 
 #### Enablement and rearming
 
@@ -206,7 +243,7 @@ Target disappearance does not guarantee undo. The utility does not restore the c
 These criteria cover zero, one, two, or more than three contacts.
 Further changes, including lifting all remaining fingers, do not restart or extend the timer.
 After successful continuation, a later departure from three starts a new grace period with a new deadline.
-The default requires comparison with macOS. T11 defines invalid-configuration recovery and changes during a drag.
+The default requires comparison with macOS. RF-1 rejects invalid configuration and applies file changes only after restart.
 
 ### RF-6: Continue a drag
 
@@ -284,7 +321,7 @@ Canceling a candidate does not itself end the drag. The existing drag and grace-
 Duration uses milliseconds. Movement uses millimeters and remains independent of the drag-start threshold.
 The defaults require comparison with macOS before an equivalence claim.
 Expiry takes priority when candidate lift coincides exactly with the grace deadline.
-T11 defines invalid-configuration recovery and changes to configuration during a drag.
+RF-1 rejects invalid configuration and applies configuration-file changes only after restart.
 
 The application determines the result of the release. A release does not guarantee that a file drop succeeds.
 
@@ -427,6 +464,14 @@ Linux sensitivity remains relative to ordinary Linux pointing, as T04 requires.
 
 | Case | Required result |
 | --- | --- |
+| Configuration is missing or a setting is omitted | Use the applicable defaults without creating or rewriting configuration. |
+| Existing configuration is unreadable, malformed, or invalid | Fail startup with an actionable English error. Preserve normal touchpad handling. |
+| A setting repeats, has an unknown name, or uses a string instead of its required type | Reject configuration rather than infer or convert a value. |
+| A positive numeric value overflows or converts to zero | Fail validation and report the supported range without clamping. |
+| Configuration changes during dragging, grace, or idle operation | Keep loaded settings until restart. Runtime commands retain their existing behavior. |
+| Selection is omitted with multiple compatible touchpads | Fail startup and list the choices. |
+| An explicit selection is missing or incompatible | Fail startup and report the selection and reason without substituting another device. |
+| No compatible touchpad exists | Fail startup while preserving normal touchpad handling. |
 | Three stationary fingers while ready | No generated click or drag. |
 | Contact count differs from three while ready | No three-finger drag starts. |
 | Three contacts arrive separately | Establish the baseline when the third valid contact arrives, without a placement time limit. |
@@ -442,7 +487,7 @@ Linux sensitivity remains relative to ordinary Linux pointing, as T04 requires.
 | Valid contact count or identities change before drag start | Discard the baseline. Establish a new baseline when exactly three valid contacts remain. |
 | A detected palm touches beside three valid contacts | Exclude the palm. Keep the existing baseline. |
 | One thumb and two other fingers form the group | Count all three contacts unless a contact is a detected palm. |
-| A configured threshold is zero, negative, nonnumeric, or nonfinite | Reject the value. Configuration recovery remains open under T11. |
+| A configured threshold is zero, negative, nonnumeric, or nonfinite | Reject configuration and fail startup while preserving normal touchpad handling. |
 | Contact count first departs from three during dragging | Start the grace period, including when all fingers lift. |
 | Contacts change again during grace, including all remaining fingers lifting | Preserve the original deadline. |
 | Qualifying continuation movement occurs before expiry | Continue the same drag without an intervening release and cancel the timer. |
@@ -451,7 +496,7 @@ Linux sensitivity remains relative to ordinary Linux pointing, as T04 requires.
 | Contact identities change during grace while three contacts remain | Reset the continuation baseline without changing the deadline. |
 | Dragging resumes, then the contact count departs from three again | Start a new grace period from the new interruption. |
 | No grace duration is configured | Use 300 ms. |
-| Grace duration is zero, negative, nonnumeric, or nonfinite | Reject the value. Configuration recovery remains open under T11. |
+| Grace duration is zero, negative, nonnumeric, or nonfinite | Reject configuration and fail startup while preserving normal touchpad handling. |
 | Grace expires with contacts remaining | End the drag. Require all valid contacts to lift before a new RF-2 gesture. |
 | A drag completes with zero valid contacts | The zero-contact requirement is already satisfied for the next gesture. |
 | Startup or enablement occurs with contacts already down | Wait for access, cleanup, and zero valid contacts before arming. |
@@ -534,12 +579,14 @@ Linux sensitivity remains relative to ordinary Linux pointing, as T04 requires.
 - Independent desktop observations support response measurements. Inconclusive results do not count as passes.
 - Pointer-distance differences meet the ordinary-pointing tolerance, with matching direction and no repositioning-induced movement.
 - Privacy and configuration checks satisfy NFR-5 and NFR-6.
+- Configuration checks verify defaults, strict validation, conversion bounds, restart-only changes, and unambiguous touchpad selection.
 - Documentation, messages, and errors satisfy NFR-7 and NFR-8.
 - The macOS comparison records gesture outcomes and separate timing differences. Every behavioral mismatch receives review before any equivalence claim.
 - The team resolves release-blocking questions. The user explicitly accepts any deferred questions.
 
 ## Resolved decisions
 
+- **T11:** RF-1 defines defaults, strict validation, restart-only configuration, and explicit or unambiguous automatic touchpad selection.
 - **OQ-1 (T03):** Default to a configurable 300 ms grace period. Accept only finite numeric durations greater than zero.
 - **OQ-2 (T02):** Use a fresh one-finger tap, recognized on lift. RF-7 defines configurable 200 ms and 1 mm limits.
 - **OQ-3 (T01):** Use group displacement with a configurable 1 mm default. RF-2 defines contact validity, staggered placement, and baseline resets.
@@ -555,5 +602,4 @@ Linux sensitivity remains relative to ordinary Linux pointing, as T04 requires.
 
 ## [OPEN QUESTIONS]
 
-- **T11:** Finalize configuration defaults, validation, invalid-configuration recovery, and changes during a drag.
-- **T12:** Review remaining consistency gaps, including device selection and switching, before implementation.
+- **T12:** Review remaining consistency gaps, including runtime device replacement and switching, before implementation.

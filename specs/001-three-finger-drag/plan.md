@@ -15,7 +15,6 @@ The input backend remains provisional until its feasibility checks pass.
 
 | Decision | Required clarification | Coverage |
 | --- | --- | --- |
-| Pointer verification | Define numerical tolerances and response limits for T04's ordinary-pointing match. | RF-3, RF-6, OQ-9 |
 | Configuration | Define remaining settings and invalid-configuration behavior. T01 through T03 approve drag-start, ending-tap, and grace settings. | RF-1, RF-2, RF-5, RF-7, RF-9 |
 
 The specification must also address contact noise.
@@ -97,7 +96,8 @@ Coverage: RF-2, RF-3, RF-4, and RF-6.
 - Do not start a grace timer solely because active-drag contacts become stationary.
 
 Stationary returns during grace still follow T03's fixed deadline and continuation threshold.
-T10 defines numerical tolerances and response-time limits. Backend feasibility must verify the ordinary-pointing match.
+T10 sets a 5% or 2-logical-pixel distance tolerance and separate processing and desktop-response limits.
+Backend feasibility must verify the ordinary-pointing match.
 
 ### Approved T05 decisions
 
@@ -195,6 +195,27 @@ Coverage: RF-1, RF-4, and RF-8. Specification reference: resolved OQ-8 and RF-1'
 T13 records actual hardware and software inventories before acceptance runs. T09 approves the selection policy, not test results.
 Apple's guide establishes feature enablement. It does not supply numerical drag thresholds or prove compatibility by model year.
 The macOS reference remains native behavior rather than another utility's approximation.
+
+### Approved T10 decisions
+
+Coverage: RF-2, RF-3, RF-6, RF-7, and RF-9. Specification reference: NFR-2 and resolved OQ-9.
+
+- Measure utility processing delay separately from independently observed desktop response.
+- Require processing p95 at most 5 ms, with no sample above 20 ms.
+- Require desktop-response p95 at most 50 ms, with no sample above 100 ms.
+- Start timing at the qualifying input event, termination command, or grace deadline specified in NFR-2.
+- For recoverable cleanup, start timing when release becomes possible in the owning session.
+- Measure continuation's state transition internally. Measure visible motion from the first subsequent movement event.
+- Use at least 100 samples per operation, distribution, and application backend. Keep slow samples and calculate results separately.
+- Use a warmed-up session without deliberate background workload. Fix power mode, refresh rate, and settings.
+- Use monotonic timestamps and an independent desktop observer. Record precision and uncertainty.
+- Mark results inconclusive if uncertainty could change pass to fail.
+- Compare three-finger and ordinary one-finger motion on the same Linux touchpad using equivalent distances and speeds.
+- Allow distance error up to the larger of 5% of the reference distance and 2 logical pixels. Require matching direction.
+- Compare macOS gesture outcomes and review every mismatch before claiming equivalence. Report timing differences separately.
+- Retain aggregates and measurement details only. Do not persist captured input-event streams or per-event runtime records.
+
+These are approved targets, not benchmark results. The Linux latency limits remain independent of macOS timing measurements.
 
 ## 2. Module structure
 
@@ -769,7 +790,7 @@ Coverage: RF-2, RF-3, RF-4, and RF-6. These scenarios define future tests, not e
 | A subsequent event moves the same group by 0.2 mm | Map only that 0.2 mm movement through the ordinary-pointing response. |
 | Continuation qualifies before expiry with threshold overshoot | Cancel grace and keep the hold. Discard all motion through the crossing event. |
 | Fingers return at a distant touchpad position | Repositioning causes no pointer movement. Only movement after qualifying continuation moves the pointer. |
-| Equivalent group and one-finger trajectories use equal displacement and speed | Pointer direction, sensitivity, and acceleration match within T10's future numerical tolerances. |
+| Equivalent group and one-finger trajectories use equal displacement and speed | Direction matches. Distance error stays within 5% of the reference or 2 logical pixels, whichever is larger. |
 | Group movement is rightward or upward | Pointer movement is rightward or upward, respectively. |
 | Natural scrolling is enabled or disabled | The same group trajectory produces the same pointer direction. |
 | Left-handed mode swaps physical button mappings | Start produces ordinary primary-button selection or dragging, not a secondary action. |
@@ -912,6 +933,54 @@ Use ordinary primary-button title-bar dragging as the baseline for each tested w
 No utility-driven window-state transition is required to overcome desktop movement restrictions.
 Record inventories and aggregate outcomes without persisting input events.
 
+### T10 measurement procedure and acceptance scenarios
+
+Coverage: RF-2, RF-3, RF-6, RF-7, RF-9, NFR-1, and NFR-2.
+These procedures define future verification. No measurements have been collected for this task.
+
+1. Use T13's recorded environment and verify the application's actual native Wayland or XWayland backend.
+2. Warm up the session and record power mode, display refresh rate, settings, measurement precision, and uncertainty.
+3. Select one operation and its origin and endpoints from NFR-2's timing table.
+4. Map input timestamps, runtime timestamps, and deadlines to the same monotonic clock domain for processing measurements.
+5. Use an independent observer to measure actual desktop button or pointer changes against the trigger.
+6. Calibrate any cross-clock timing alignment and include its uncertainty in the result.
+7. Collect at least 100 valid samples for that operation and environment. Retain slow samples in the calculation.
+8. Calculate processing and desktop distributions separately. Use the nearest-rank p95 and the maximum observed sample.
+9. Compare both statistics with their limits, including uncertainty. Report pass, fail, or inconclusive.
+10. Save only aggregates, sample counts, scenario descriptions, and measurement metadata. Discard temporary in-memory samples afterward.
+11. Repeat each check separately on both distributions and both application backends.
+
+For 100 samples, nearest-rank p95 is the 95th sample after sorting by duration.
+A missing response is a failed observation, not a sample to omit or a successful output submission.
+Do not substitute the time the utility notices restored output for the independently established release opportunity.
+Record unavailable-output waiting separately from measured cleanup response. It does not satisfy cleanup by itself.
+Do not time nonexistent pointer output at the continuation threshold. T04 requires the pointer to remain still there.
+Owner-disappearance confirmation remains a separate T05 cleanup test, not a synthetic button-release latency sample.
+
+For pointer comparison, use matched displacement and speed with the same Linux touchpad, display scale, and settings.
+Compare active-motion distances after recognition. Do not count the discarded start or continuation threshold movement as pointer travel.
+Use logical desktop pixels consistently. Convert physical display measurements using the recorded display scale when necessary.
+Calculate the allowed distance error as the larger of 0.05 times the one-finger reference distance and 2 logical pixels.
+Check direction separately and preserve the no-repositioning-jump requirement.
+
+| Scenario | Expected result |
+| --- | --- |
+| Processing p95 is 5 ms and maximum is 20 ms | Pass only if uncertainty does not permit either limit to be exceeded. |
+| Processing p95 exceeds 5 ms or any sample exceeds 20 ms | Fail that timing check. |
+| Desktop p95 exceeds 50 ms or any sample exceeds 100 ms | Fail that timing check. |
+| A slow sample occurs in a warmed-up run | Include it in the percentile and maximum. |
+| An estimate could fall on either side of a limit after uncertainty | Report inconclusive rather than passed. |
+| A 300 ms grace interval ends | Measure release response from the fixed deadline, not initial finger lift. |
+| Output is unavailable before recovery | Measure cleanup latency from when release becomes possible, excluding the unavailable interval. |
+| Continuation qualifies | Measure its state transition internally. Measure pointer response from the next movement event. |
+| The one-finger reference travels 100 logical pixels | Allow at most 5 logical pixels of distance difference, with matching direction. |
+| The one-finger reference travels 20 logical pixels | Allow at most 2 logical pixels of distance difference, with matching direction. |
+| A macOS outcome differs for start, repositioning, continuation, tap-to-end, or release | Record and review the mismatch before claiming equivalence. |
+
+Use Finder and TextEdit for the fixed macOS comparison. Report timing differences separately from outcome matching.
+Linux pointer mapping remains relative to ordinary one-finger Linux pointing rather than identical screen travel on different hardware.
+Persist neither raw input events nor pointer paths as measurement evidence.
+
 ### Adapter integration tests
 
 Coverage: RF-1 through RF-9.
@@ -954,7 +1023,9 @@ Use Finder and TextEdit with native three-finger dragging enabled.
 Keep the recorded Mac model, trackpad, macOS build, and relevant settings fixed throughout the comparison.
 Store scenario descriptions, aggregate timings, and pass/fail results only.
 Do not capture or persist input-event streams.
-Response-time acceptance remains blocked until OQ-9 defines its limits.
+Apply T10's approved measurement procedure and limits. Inconclusive measurements do not establish acceptance.
+Compare start, repositioning, continuation, tap-to-end, and release outcomes with native macOS and review every mismatch.
+Report timing differences separately without relaxing the Linux latency limits.
 
 ### Persistence and language tests
 

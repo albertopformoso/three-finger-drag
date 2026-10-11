@@ -16,12 +16,11 @@ The input backend remains provisional until its feasibility checks pass.
 | Decision | Required clarification | Coverage |
 | --- | --- | --- |
 | Pointer verification | Define numerical tolerances and response limits for T04's ordinary-pointing match. | RF-3, RF-6, OQ-9 |
-| Lifecycle interruptions | Define process exit, session lock, suspend, and desktop changes under T08. | RF-4, RF-8, RF-9 |
 | Compatibility | Select touchpads, Hyprland versions, applications, window states, and the macOS reference. | RF-1, RF-4, OQ-8 |
 | Configuration | Define remaining settings and invalid-configuration behavior. T01 through T03 approve drag-start, ending-tap, and grace settings. | RF-1, RF-2, RF-5, RF-7, RF-9 |
 
 The specification must also address contact noise.
-It must define outcomes for process exit, session lock, suspend, device changes, and target-window disappearance.
+Device-selection and switching details still require specification decisions.
 
 The completion criteria must preserve the constitution's macOS-equivalence requirement.
 User acceptance of unspecified differences does not establish equivalence.
@@ -118,7 +117,7 @@ Coverage: RF-8 and RF-9.
 
 The backend must establish reliable evidence for release or owner disappearance.
 Kernel write acceptance alone does not prove desktop receipt. Missing confirmation keeps cleanup pending.
-T10 defines measurable cleanup response limits. T08 retains process and session lifecycle decisions.
+T10 defines measurable cleanup response limits. T08 defines process and session lifecycle behavior.
 
 ### Approved T06 decisions
 
@@ -157,6 +156,25 @@ Coverage: RF-3, RF-7, RF-8, and RF-9. RF-2's rearming criteria also require rele
 
 Cancellation does not guarantee undo. Applications may treat release as a drop.
 The backend must preserve consumed-press tracking until the matching release, including across cleanup and disablement.
+
+### Approved T08 decisions
+
+Coverage: RF-4, RF-8, and RF-9.
+
+- Lock or suspend preparation terminates dragging or grace, stops movement, cancels timers, releases the held button, and blocks new drags.
+- Apply T05 when cleanup remains pending. Unlock and resume require T06 readiness checks and fresh contacts.
+- Normal exit stops movement and timers, releases the button, and restores normal touchpad handling before exit.
+- Failed release during normal exit follows T05 cleanup. Do not report successful shutdown while cleanup remains unresolved.
+- After crash or forced termination, the system must clear the utility's held button state and restore normal touchpad handling.
+- A later restart follows startup configuration and fresh-contact checks. It never restores an old gesture.
+- Session end or connection loss terminates the gesture and blocks new drags. Never send old input into another session.
+- Recovery requires an available unlocked session, completed cleanup, and T06 readiness checks, including T07's released-button condition.
+- Monitor changes preserve normal gesture rules while the session remains available.
+- Accept desktop pointer and window repositioning. Continue relative movement without adding compensating movement.
+- Target-window closure or application exit preserves normal gesture rules. Leave target handling to the desktop and application.
+
+Target disappearance does not select a replacement target or guarantee undo.
+System cleanup after process death requires observed integration evidence, not assumptions about finalizers or shutdown handlers.
 
 ## 2. Module structure
 
@@ -266,6 +284,7 @@ Coverage: RF-1 through RF-9. Constitution principles 3 and 5.
 | Failure report state | Failed operation, cause, pending-release status, last reported error identity | Keep in memory. Suppress unchanged repeated errors without storing input events. RF-9. |
 | Physical-button state | Selected device identity, held physical buttons, consumed press identities awaiting release | Preserve button pairing across gesture termination and cleanup. Keep in memory. RF-7, RF-8. |
 | Instance ownership | Desktop-session identity and exclusive ownership handle | Reject duplicate startup before device acquisition. Runtime commands target the owner. RF-8. |
+| Lifecycle state | Session identity, session availability, lock state, suspend state, shutdown requested | Gate drag readiness independently of requested enablement. Keep in memory. RF-4, RF-8, RF-9. |
 | Explicit configuration | Schema version, startup enablement, drag-start threshold, ending-tap limits, grace duration, and other approved settings | Runtime overrides never persist. RF-1, RF-2, RF-5, RF-7, RF-9. |
 
 Use monotonic timestamps from one mapped clock domain.
@@ -394,8 +413,8 @@ Coverage: RF-2, RF-7, RF-8, and RF-9.
 5. While cleanup remains pending, block new drags and discard affected-touchpad input regardless of requested enablement.
 6. After cleanup, restore ordinary pointing and scrolling when touchpad access permits, independently of readiness.
 7. If requested enablement is disabled, allow normal desktop three-finger handling and remain disabled.
-8. If required access is unavailable, remain unarmed and unavailable for new drags.
-9. Once enabled, access is available, and cleanup is complete, wait for zero valid contacts and all physical touchpad buttons released.
+8. If required access or lifecycle availability is absent, remain unarmed and unavailable for new drags.
+9. Once enabled with access, lifecycle availability, and completed cleanup, wait for zero contacts and released physical touchpad buttons.
 10. When both conditions hold, arm recognition and enter ready state.
 11. Permit subsequent fresh contacts to form a gesture without clearing arming merely because contacts appear.
 12. On drag start, consume arming. On failure, clear arming without changing requested enablement.
@@ -422,6 +441,28 @@ Coverage: RF-3, RF-7, RF-8, and RF-9.
 
 Events from other pointers stay outside this procedure. Their motion can move the desktop pointer during the utility's held action.
 Do not claim that releasing the held action undoes an application operation.
+
+### Lifecycle and desktop interruptions
+
+Coverage: RF-4, RF-8, and RF-9.
+
+1. Translate platform lock, suspend preparation, resume, unlock, session-loss, and normal-exit notifications into runtime lifecycle events.
+2. On lock or suspend preparation, clear arming and mark lifecycle availability false.
+3. Terminate any active gesture, discard queued movement, cancel timers, and release the held button.
+4. Route unresolved release through T05 cleanup. Preserve the user's requested enablement state.
+5. On unlock or resume, recheck session identity, access, lock state, and pending cleanup before evaluating fresh-contact readiness.
+6. On session end or connection loss, block new drags and perform session-bound cleanup.
+7. Reject stale movement and releases from the old session. Do not treat lost connection as confirmation of cleanup.
+8. On normal exit, mark shutdown requested and block new drags before stopping gesture activity.
+9. Release the held button and complete cleanup before restoring ordinary touchpad ownership and tearing down remaining resources.
+10. If cleanup fails, retain the obligation and report the failure without claiming successful shutdown.
+11. On display changes, preserve the gesture phase and existing grace deadline while lifecycle availability permits.
+12. Use the desktop's resulting pointer position as the origin for subsequent relative output. Add no compensation or absolute warp.
+13. On target disappearance, retain normal movement and ending rules without selecting or restoring an application target.
+
+The Hyprland and Linux adapters own lifecycle notification access. Gesture logic receives plain lifecycle values through the runtime.
+Normal exit restores ordinary touchpad handling before releasing session-instance ownership.
+Do not persist lifecycle state or pending gesture state across process restarts.
 
 ### Event ordering
 
@@ -545,6 +586,8 @@ Retain only cleanup and error-deduplication metadata. Do not persist it or retai
 The adapter supplies cleanup evidence to the runtime. Gesture logic must not query the desktop.
 No process can execute cleanup after an uncatchable termination.
 Kernel device teardown and compositor behavior therefore require direct failure tests.
+T08 requires these tests to observe cleared button state and normal touchpad handling after process death.
+If those outcomes fail, the backend does not satisfy acceptance. Do not mark the crash scenario passed based on process exit alone.
 
 ## 6. Technical decisions and discarded alternatives
 
@@ -796,6 +839,35 @@ For T06 scenarios, arming now also requires every selected-touchpad physical but
 Use deterministic tests for physical-button pairing, recognition blocking, and cancellation effects.
 Use integration tests for duplicate-instance ownership, command delivery, and desktop behavior with another pointing device.
 Observe application outcomes without asserting that cancellation reverses a drop.
+
+### T08 acceptance scenarios
+
+Coverage: RF-4, RF-8, and RF-9. These scenarios define future tests, not executed implementation tests.
+
+| Scenario | Expected result |
+| --- | --- |
+| Session locks during dragging or grace | Terminate, discard queued movement, cancel timers, release, and block new drags. |
+| Suspend preparation occurs during dragging or grace | Apply the same termination and release behavior before suspension where the environment permits. |
+| Release fails during lock or suspend preparation | Retain T05 cleanup and affected-touchpad suppression. |
+| Unlock or resume occurs with cleanup incomplete | Keep new drags blocked until cleanup and all other readiness checks pass. |
+| Unlock or resume occurs with contacts or physical buttons held | Require zero valid contacts and all selected-touchpad physical buttons released before arming. |
+| Unlock or resume occurs while explicitly disabled | Keep dragging disabled. Preserve T06 ordinary-input behavior after cleanup. |
+| Normal exit occurs during dragging or grace | Release, complete cleanup, and restore ordinary touchpad handling before exit. |
+| Normal exit cannot complete release | Retain cleanup and report failure without claiming successful shutdown. |
+| The process crashes while holding its drag button | Observe system removal of the held button state and restoration of ordinary touchpad handling. |
+| The process receives forced termination while holding its drag button | Verify the same system outcomes without relying on any process cleanup handler. |
+| A later restart begins with contacts already down | Use startup configuration and wait for fresh-contact readiness. Do not restore the old gesture or runtime override. |
+| Session end or connection loss occurs during a drag | Terminate and block new drags. Apply T05 without sending stale input to another session. |
+| A session becomes available but remains locked | Keep recognition unavailable. |
+| A monitor disconnects or the display layout changes during dragging | Preserve the gesture while the session remains available. Add no compensating pointer movement. |
+| The desktop repositions the pointer or dragged window | Continue subsequent relative motion from the resulting pointer position. |
+| Display layout changes during grace | Preserve the existing deadline. Do not resume merely because the pointer moves externally. |
+| The dragged window closes or its application exits | Keep normal gesture movement and ending rules. Do not select a replacement target or promise undo. |
+
+Use synthetic lifecycle events for deterministic transition tests.
+Run actual crash and forced-termination tests from an external observer in the isolated desktop test session.
+Verify both button state and ordinary pointing and scrolling after process death, independently of any later utility restart.
+Record aggregate results and scenario outcomes without captured input-event streams.
 
 ### Adapter integration tests
 

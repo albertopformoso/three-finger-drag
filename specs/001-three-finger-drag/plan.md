@@ -11,6 +11,10 @@ The specification remains the authority for observable behavior.
 Technical proposals cannot resolve its open questions without an approved specification update.
 The input backend remains provisional until its feasibility checks pass.
 
+The user approved local development on CachyOS while Arch Linux and Mac inventories are unavailable.
+T13a verifies this local environment and gates T15 with T14. T13b and T13c retain the deferred environment inventories.
+Full T13, cross-distribution acceptance, and native macOS comparison remain required for release.
+
 ## 1. Approved specification decisions
 
 T01 through T12 resolve the reviewed product-behavior questions.
@@ -359,6 +363,98 @@ The touchpad acceptance baseline must verify palm rejection, thumb inclusion, an
 Require fourth-contact detection and physical axis resolution. Defer partial-multitouch devices that cannot satisfy these requirements.
 It must also verify contact identities and axis resolution for millimeter measurements.
 Verify logical primary-button behavior with both standard and left-handed mappings.
+
+### T14 native adapter contract
+
+Coverage: RF-1, RF-8, and RF-9. This defines the API boundary, not an implemented or verified backend.
+
+#### Dependency and version policy
+
+Use the system libevdev C library through a narrow native binding in `internal/platform/linuxinput/`.
+The initial supported build floor is libevdev 1.14.0, with the `libevdev.so.2` ABI.
+This is a deliberate project baseline, not a claim that every listed function first appeared in 1.14.0.
+Require `pkg-config` metadata for `libevdev >= 1.14.0` and matching development headers.
+Revalidate the contract before accepting a different major ABI. Record exact runtime packages during T13 acceptance preparation.
+
+The inspected environment provides libevdev package `1.14.0-1.1` and pkg-config version `1.14.0`.
+Installed headers confirm the calls and ownership rules below.
+The binding avoids duplicated ioctl layouts and reuses libevdev's synchronization and uinput handling.
+Direct hand-written evdev/uinput structures are the discarded alternative because they duplicate platform-sensitive ABI work.
+No Go framework or third-party Go binding is required by this contract.
+
+#### Required native calls
+
+| Operation | Calls | Contract |
+| --- | --- | --- |
+| Open context | `libevdev_new_from_fd`, `libevdev_free` | The adapter owns the input descriptor. Freeing the context does not close it. |
+| Identity | `libevdev_get_name`, `libevdev_get_phys`, `libevdev_get_uniq`, `libevdev_get_id_bustype`, `libevdev_get_id_vendor`, `libevdev_get_id_product`, `libevdev_get_id_version` | Copy strings and values before destroying the context. Supplement with platform identity metadata. |
+| Capabilities | `libevdev_has_property`, `libevdev_has_event_type`, `libevdev_has_event_code`, `libevdev_get_abs_info`, `libevdev_get_num_slots` | Validate T09 capabilities before grabbing input. Copy axis metadata out of native memory. |
+| Clock | `libevdev_set_clock_id` with `CLOCK_MONOTONIC` | Select the clock before processing frames. Failure prevents this adapter from claiming comparable event timestamps. |
+| Exclusive ownership | `libevdev_grab` with `LIBEVDEV_GRAB` and `LIBEVDEV_UNGRAB` | Grab only the selected physical touchpad. Report acquisition failure without changing other devices. |
+| Event reads | `libevdev_next_event` with `LIBEVDEV_READ_FLAG_NORMAL` | Assemble complete frames through `SYN_REPORT`. No partial frame reaches recognition. |
+| Synchronization | `libevdev_next_event` with `LIBEVDEV_READ_FLAG_SYNC`, `libevdev_get_current_slot`, `libevdev_get_slot_value`, `libevdev_get_event_value` | Terminate the gesture on synchronization loss. Rebuild reliable state before fresh-contact recovery. |
+| Virtual descriptions | `libevdev_new`, `libevdev_set_name`, `libevdev_set_phys`, `libevdev_set_uniq`, `libevdev_set_id_bustype`, `libevdev_set_id_vendor`, `libevdev_set_id_product`, `libevdev_set_id_version` | Construct separate virtual descriptions with identifiable utility-owned devices. |
+| Virtual capabilities | `libevdev_enable_property`, `libevdev_enable_event_type`, `libevdev_enable_event_code` | Copy required touchpad properties and axis metadata. Give the virtual pointer only its required capabilities. |
+| Virtual lifecycle | `libevdev_uinput_create_from_device`, `libevdev_uinput_destroy` | Use a distinct caller-owned uinput descriptor per virtual device. Destroy before closing its descriptor. |
+| Virtual identity | `libevdev_uinput_get_syspath`, `libevdev_uinput_get_devnode` | Check for null results. Device creation alone does not establish Hyprland recognition or seat assignment. |
+| Output | `libevdev_uinput_write_event` | Terminate each output frame with `EV_SYN/SYN_REPORT`. Return submission errors without claiming desktop receipt. |
+
+The platform layer opens input descriptors read-only and nonblocking, with close-on-exec enabled.
+It opens uinput descriptors with the access required by uinput and keeps descriptor ownership explicit.
+Readiness waiting and cancellation use platform descriptor operations outside gesture logic.
+One runtime owner serializes native context access. Callbacks must not independently mutate the same context.
+
+#### Frame and failure semantics
+
+- `LIBEVDEV_READ_STATUS_SUCCESS` supplies one event, not necessarily a complete frame.
+- `-EAGAIN` means no currently available event. It is not device disconnection or a drag failure.
+- `LIBEVDEV_READ_STATUS_SYNC` signals synchronization handling. Immediately notify the runtime of lost reliable state.
+- Drain synchronization deltas with `LIBEVDEV_READ_FLAG_SYNC` until `-EAGAIN`, then rebuild contact and button state.
+- Never replay synchronization deltas as drag motion or resume the terminated gesture.
+- Report device removal, revoked access, and other fatal read errors with their operation and native error cause.
+- Any output-write failure enters T05 cleanup. A partial frame leaves output state uncertain rather than released.
+- Preserve physical-button consumption markers and late-tap-lift markers independently from gesture recognition state.
+- Process input in memory. Do not log or persist native events, contact frames, or pointer paths.
+
+#### Domain-facing operations
+
+| Abstract operation | Inputs and outputs | Owner |
+| --- | --- | --- |
+| Inspect device | Device locator to copied identity and capability metadata | Input adapter |
+| Acquire selected device | Verified identity to owned input handle or operation-and-cause error | Runtime through input adapter |
+| Read complete frame | Handle to timestamped contacts, physical buttons, or availability/synchronization status | Input adapter |
+| Prepare virtual outputs | Capability descriptions to separate touchpad and pointer handles | Output adapter |
+| Submit output frame | Abstract movement/button effects to submission result and output-session identity | Output adapter |
+| Release owned resources | Handles to cleanup results, retaining unresolved release obligations | Runtime |
+
+Native pointers and descriptors never enter `internal/gesture/`.
+The runtime passes copied domain values and receives abstract effects.
+The Hyprland adapter supplies session identity, readiness, and independently verified cleanup evidence.
+
+#### Ownership and cleanup
+
+1. Validate configuration and device selection before grabbing the physical touchpad.
+2. Prepare virtual outputs and establish desktop readiness before replacing ordinary routing.
+3. On failure, stop effects and retain any held or uncertain output state with its owning device and session.
+4. Attempt release only through the owning output session. Apply T05 while cleanup remains pending.
+5. Destroy uinput objects before closing their caller-owned descriptors.
+6. Free physical libevdev contexts and close their separately owned descriptors exactly once.
+7. Restore ordinary input ownership only under the approved cleanup rules.
+
+`libevdev_uinput_destroy` returns no compositor acknowledgment.
+Closing a uinput descriptor destroys its kernel device, but does not alone prove Hyprland cleared a held button.
+Release delivery, compositor disappearance evidence, crash cleanup, and input-transfer fidelity remain T16 through T29 feasibility obligations.
+libevdev exposes device metadata and events. It does not provide palm classification or ordinary-touchpad pointer acceleration as a complete policy.
+T28 must verify the required contact information. T25 must establish the approved motion match without duplicate acceleration.
+
+#### Verification sources and completion
+
+- `/usr/include/libevdev-1.0/libevdev/libevdev.h`: context ownership, event status, capability queries, grabs, and clock selection.
+- `/usr/include/libevdev-1.0/libevdev/libevdev-uinput.h`: descriptor lifetime, explicit synchronization frames, output returns, and nullable device identity.
+- `pkg-config --modversion libevdev` and `pacman -Q libevdev`: installed development and package versions.
+
+T14's documented call surface, version constraints, ownership rules, and dependency justification are complete.
+Executable binding tests and actual backend feasibility remain unverified.
 
 ## 4. Data model
 

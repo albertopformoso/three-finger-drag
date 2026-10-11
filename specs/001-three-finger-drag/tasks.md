@@ -37,7 +37,7 @@ These tasks capture user decisions. They do not select new behavior without appr
 | T05 | Define failed-drag termination and pending release. | RF-8, RF-9 | 25 min | T03 | Made when: Approved terms distinguish terminated gestures from pending releases and define ordinary-input routing during cleanup. Evidence: [T05 decisions](#t05-completion-evidence). | done |
 | T06 | Define enablement, recovery, and rearming. | RF-2, RF-7, RF-8, RF-9 | 25 min | T05 | Made when: Approved criteria cover startup, disablement, recovery, fresh contacts, and contacts remaining after expiry. Evidence: [T06 decisions](#t06-completion-evidence). | done |
 | T07 | Define physical-button and other-device interactions. | RF-3, RF-7, RF-8, RF-9 | 25 min | T04, T06 | Made when: Approved criteria cover physical buttons, other pointers, multiple touchpads, duplicate instances, and explicit cancellation. Evidence: [T07 decisions](#t07-completion-evidence). | done |
-| T08 | Define lifecycle and desktop interruption behavior. | RF-4, RF-8, RF-9 | 25 min | T05, T06 | Made when: Approved criteria cover exit, crash, lock, suspend, session loss, monitor changes, and target-window disappearance. | - |
+| T08 | Define lifecycle and desktop interruption behavior. | RF-4, RF-8, RF-9 | 25 min | T05, T06 | Made when: Approved criteria cover exit, crash, lock, suspend, session loss, monitor changes, and target-window disappearance. Evidence: [T08 decisions](#t08-completion-evidence). | done |
 | T09 | Select the compatibility and macOS baseline. | RF-1, RF-4, RF-8 | 25 min | None | Made when: The user approves device capabilities, versions, applications, XWayland scope, window states, and the macOS reference. | - |
 | T10 | Define measurable responsiveness and comparison rules. | RF-2, RF-3, RF-6, RF-7, RF-9 | 25 min | T03, T04, T09 | Made when: Approved limits and measurement methods cover start, motion, continuation, release, and recoverable failure cleanup. | - |
 | T11 | Define explicit configuration behavior. | RF-1, RF-5, RF-7, RF-9 | 20 min | T03, T06 | Made when: Approved settings have defaults, bounds, missing-file behavior, invalid-value behavior, and rules for changes during a drag. | - |
@@ -171,6 +171,24 @@ The user approved these decisions in the T07 clarification discussion:
 Evidence: [RF-2 rearming](spec.md#enablement-and-rearming), [RF-7 termination](spec.md#physical-button-termination-and-explicit-cancellation), and [RF-8 devices](spec.md#other-devices-and-duplicate-instances).
 [Resolved OQ-7](spec.md#resolved-decisions), [plan decisions](plan.md#approved-t07-decisions), and [T07 acceptance scenarios](plan.md#t07-acceptance-scenarios) record behavior and future verification.
 T07 completes specification decisions, not implementation testing.
+
+### T08 completion evidence
+
+The user approved these decisions in the T08 clarification discussion:
+
+- Lock or suspend preparation terminates the drag, stops movement, cancels timers, releases the held button, and blocks new drags.
+- Apply T05 if cleanup remains pending. Unlock or resume requires T06 readiness checks and fresh contacts.
+- Normal exit releases the button and restores normal touchpad handling before exit. Failed release follows T05 rather than successful shutdown.
+- Crash and forced-termination tests must verify system cleanup of held button state and restoration of normal touchpad handling.
+- Restart follows startup configuration and fresh-contact checks, without resuming an old gesture.
+- Session loss terminates the drag and blocks new drags. Apply T05 and never send old input into a new session.
+- Recovery requires an available unlocked session and all readiness checks.
+- Monitor and display-layout changes preserve normal gesture rules while the session remains available.
+- Let the desktop reposition or constrain pointers and windows. Continue relative movement without a compensating jump.
+- Target-window closure or application exit preserves normal gesture rules. Do not select a replacement target or promise undo.
+
+Evidence: [RF-4 desktop changes](spec.md#desktop-changes-during-a-drag), [RF-9 lifecycle interruptions](spec.md#lifecycle-interruptions), and [plan decisions](plan.md#approved-t08-decisions).
+The [T08 acceptance scenarios](plan.md#t08-acceptance-scenarios) define future verification. T08 completes specification decisions, not implementation testing.
 
 ## 2. Establish backend feasibility
 

@@ -39,7 +39,7 @@ These tasks capture user decisions. They do not select new behavior without appr
 | T07 | Define physical-button and other-device interactions. | RF-3, RF-7, RF-8, RF-9 | 25 min | T04, T06 | Made when: Approved criteria cover physical buttons, other pointers, multiple touchpads, duplicate instances, and explicit cancellation. Evidence: [T07 decisions](#t07-completion-evidence). | done |
 | T08 | Define lifecycle and desktop interruption behavior. | RF-4, RF-8, RF-9 | 25 min | T05, T06 | Made when: Approved criteria cover exit, crash, lock, suspend, session loss, monitor changes, and target-window disappearance. Evidence: [T08 decisions](#t08-completion-evidence). | done |
 | T09 | Select the compatibility and macOS baseline. | RF-1, RF-4, RF-8 | 25 min | None | Made when: The user approves device capabilities, versions, applications, XWayland scope, window states, and the macOS reference. Evidence: [T09 decisions](#t09-completion-evidence). | done |
-| T10 | Define measurable responsiveness and comparison rules. | RF-2, RF-3, RF-6, RF-7, RF-9 | 25 min | T03, T04, T09 | Made when: Approved limits and measurement methods cover start, motion, continuation, release, and recoverable failure cleanup. | - |
+| T10 | Define measurable responsiveness and comparison rules. | RF-2, RF-3, RF-6, RF-7, RF-9 | 25 min | T03, T04, T09 | Made when: Approved limits and measurement methods cover start, motion, continuation, release, and recoverable failure cleanup. Evidence: [T10 decisions](#t10-completion-evidence). | done |
 | T11 | Define explicit configuration behavior. | RF-1, RF-5, RF-7, RF-9 | 20 min | T03, T06 | Made when: Approved settings have defaults, bounds, missing-file behavior, invalid-value behavior, and rules for changes during a drag. | - |
 | T12 | Complete the specification consistency review. | RF-1 through RF-9 | 30 min | T01 through T11 | Made when: RF contradictions are resolved, release-blocking questions are closed, and completion criteria preserve the constitution. | - |
 
@@ -112,7 +112,7 @@ The user approved these decisions in the T04 clarification discussion:
 
 Evidence: [RF-2](spec.md#rf-2-start-a-drag), [RF-3](spec.md#rf-3-move-during-a-drag), [RF-4](spec.md#rf-4-drag-files-select-text-and-move-windows), and [RF-6](spec.md#rf-6-continue-a-drag).
 The [plan decisions](plan.md#approved-t04-decisions) and [T04 acceptance scenarios](plan.md#t04-acceptance-scenarios) define future verification.
-T04 completes specification decisions, not implementation testing. T10 retains numerical tolerances and response-time limits.
+T04 completes specification decisions, not implementation testing. T10 defines the approved numerical tolerances and response-time limits.
 
 ### T05 completion evidence
 
@@ -208,6 +208,30 @@ The user approved these decisions in the T09 clarification discussion:
 Evidence: [RF-1 baseline](spec.md#compatibility-and-acceptance-baseline), [RF-4](spec.md#rf-4-drag-files-select-text-and-move-windows), and [resolved OQ-8](spec.md#resolved-decisions).
 The [plan decisions](plan.md#approved-t09-decisions) and [baseline verification](plan.md#t09-baseline-verification) define the acceptance policy.
 T13 will record actual environments. T09 completes baseline decisions, not compatibility tests or macOS measurements.
+
+### T10 completion evidence
+
+The user approved these decisions in the T10 clarification discussion:
+
+- Measure processing delay and desktop response separately.
+- Processing delay must have p95 at most 5 ms and no sample above 20 ms.
+- Desktop response must have p95 at most 50 ms and no sample above 100 ms.
+- Measure from qualifying events or release deadlines. Exclude intentional grace time and waiting for unavailable output.
+- For recoverable cleanup, measure from when release becomes possible.
+- Measure continuation's state transition separately, then pointer response from the first subsequent movement event.
+- Collect at least 100 samples per operation, distribution, and application backend. Keep slow samples and calculate separate results.
+- Use a warmed-up session without deliberate background workload. Keep power mode, refresh rate, and settings fixed.
+- Compare three-finger and one-finger movement on the same Linux touchpad using equivalent distances and speeds.
+- Allow distance differences up to 5% of the reference or 2 logical pixels, whichever is larger. Require matching direction.
+- Use monotonic timestamps and an independent desktop observer. Record precision and uncertainty.
+- Report inconclusive results when uncertainty could change pass to fail.
+- Retain aggregate timing results, counts, and measurement details without input-event recordings.
+- Compare macOS start, repositioning, continuation, tap-to-end, and release outcomes. Review every mismatch before claiming equivalence.
+- Report macOS timing differences separately. Keep the approved Linux latency limits and ordinary-pointing reference.
+
+Evidence: [NFR-2 acceptance](spec.md#responsiveness-and-comparison-acceptance), [resolved OQ-9](spec.md#resolved-decisions), and [plan decisions](plan.md#approved-t10-decisions).
+The [measurement procedure](plan.md#t10-measurement-procedure-and-acceptance-scenarios) defines future verification.
+T10 completes acceptance-policy decisions, not performance tests or macOS measurements.
 
 ## 2. Establish backend feasibility
 

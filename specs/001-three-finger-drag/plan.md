@@ -2,6 +2,12 @@
 
 ## Status and scope
 
+October 13 behavior revision: fresh one-finger return after zero valid contacts releases immediately and restores ordinary input.
+Three-contact return before the 500 ms deadline continues the hold. Single-first staggered return ends the old gesture.
+Ending-tap recognition and its two configuration settings are superseded and removed from the active policy.
+The probe restores a complete touchpad state snapshot after submitting button release, so suppressed slot updates cannot corrupt ordinary pointing.
+Historical ending-tap procedures below require consolidation before production implementation.
+
 Intended repository location: `specs/001-three-finger-drag/plan.md`.
 
 This draft covers RF-1 through RF-9 and the project constitution.
@@ -9,7 +15,20 @@ It contains design descriptions, illustrative JSON, and pseudocode. It contains 
 
 The specification remains the authority for observable behavior.
 Technical proposals cannot resolve its open questions without an approved specification update.
-The input backend remains provisional until its feasibility checks pass.
+The user approved this backend for continued implementation at T29 on October 13.
+This approval defers T25's numerical motion evidence and T27's session-loss experiment. It does not count them as passing tests.
+Both remain required before release, alongside the other specification acceptance criteria.
+
+### T29 backend adoption decision
+
+Decision: adopt the libevdev input proxy and virtual-pointer backend for implementation on the current CachyOS baseline.
+Authority: the user's explicit approval after reviewing the incomplete T25 and deferred T27 results.
+Evidence: [backend experiments](results-summary.md).
+
+The user revised the original implementation gate, which required all eight feasibility conditions to pass before adoption.
+T30 may proceed. T25 remains partial and T27 remains deferred, with no change to their required outcomes.
+Release still requires numerical motion equivalence, session-bound cleanup evidence, and the deferred Arch Linux and macOS validation.
+If subsequent experiments disprove the design, revise the backend before claiming compliance.
 
 The user approved local development on CachyOS while Arch Linux and Mac inventories are unavailable.
 T13a verifies this local environment and gates T15 with T14. T13b and T13c retain the deferred environment inventories.
@@ -42,7 +61,7 @@ Coverage: RF-2 and RF-3. Specification reference: RF-2 and resolved OQ-3.
 
 The default still requires macOS comparison. T04 matches ordinary pointing and discards movement through the threshold-crossing event.
 T11 rejects invalid configuration at startup and applies file changes only after restart.
-T03 uses the same displacement threshold for grace-period continuation.
+The October 13 revision resumes on three-contact return without a continuation threshold.
 
 ### Approved T02 decisions
 
@@ -68,25 +87,25 @@ Both defaults require comparison with macOS.
 
 Coverage: RF-5, RF-6, and RF-7. Specification references: resolved OQ-1 and OQ-4.
 
-- Default to a configurable grace duration of 300 ms. Accept only finite numeric durations greater than zero.
+- Default to a configurable grace duration of 500 ms. Accept only finite numeric durations greater than zero.
 - Start the timer on the first departure from three valid contacts during dragging outside grace.
-- Preserve the deadline through all further contact changes, including complete lifting and stationary three-contact returns.
+- Preserve the deadline until exactly three valid contacts return or the gesture terminates.
 - Establish a fresh continuation baseline when exactly three valid contacts return.
 - Reset that baseline when valid contact count or identities change. Preserve the deadline.
-- Use group displacement and the configured drag-start threshold for continuation.
-- Resume only when that threshold is reached strictly before the deadline.
+- Resume immediately when exactly three valid contacts return strictly before the deadline, even while stationary.
+- Require no movement threshold for continuation. Reset the motion baseline at the return event.
 - Cancel the timer after successful continuation. A later interruption starts a new grace period.
 - At the exact deadline, expiry takes priority over qualifying movement and candidate lift. Release once.
 
-T04 discards movement through the continuation threshold-crossing event. T06 requires zero contacts before rearming after expiry.
+Discard displacement through the return event. T06 requires zero contacts before rearming after expiry.
 T11 keeps loaded settings fixed until restart and rejects invalid configuration at startup.
-The 300 ms default requires comparison with macOS.
+The 500 ms default requires comparison with macOS. The user approved this revision on October 13 after continuation experiments.
 
 ### Approved T04 decisions
 
 Coverage: RF-2, RF-3, RF-4, and RF-6.
 
-- Start or resume at the current pointer position. Discard movement through the threshold-crossing event, including any overshoot.
+- Start or resume at the current pointer position. Discard start-threshold displacement or continuation-return displacement, respectively.
 - Establish the motion baseline at that event's group position. Move only with subsequent group movement.
 - Match ordinary one-finger pointing direction, sensitivity, and acceleration on the same touchpad.
 - Preserve rightward and upward pointer directions. Ignore natural-scrolling direction for pointer movement.
@@ -96,7 +115,7 @@ Coverage: RF-2, RF-3, RF-4, and RF-6.
 - While three contacts remain stationary outside grace, stop pointer motion and retain the hold indefinitely.
 - Do not start a grace timer solely because active-drag contacts become stationary.
 
-Stationary returns during grace still follow T03's fixed deadline and continuation threshold.
+Stationary three-contact returns before expiry cancel grace under the revised T03 rule.
 T10 sets a 5% or 2-logical-pixel distance tolerance and separate processing and desktop-response limits.
 Backend feasibility must verify the ordinary-pointing match.
 
@@ -223,7 +242,7 @@ These are approved targets, not benchmark results. The Linux latency limits rema
 Coverage: RF-1, RF-2, RF-5, RF-7, and RF-9.
 
 - Missing configuration and omitted settings use the approved defaults without creating a file.
-- Default to enabled startup, a 1 mm drag threshold, 300 ms grace, and ending-tap limits of 200 ms and 1 mm.
+- Default to enabled startup, a 1 mm drag-start threshold, 500 ms grace, and ending-tap limits of 200 ms and 1 mm.
 - Fail startup for unreadable, malformed, or invalid existing configuration. Preserve normal touchpad handling.
 - Report the file, cause, and setting when possible, with corrective guidance. Do not replace invalid values with defaults.
 - Reject unknown or duplicate fields, unsupported versions, and incorrect types. Do not coerce numeric or Boolean strings.
@@ -465,7 +484,7 @@ Coverage: RF-1 through RF-9. Constitution principles 3 and 5.
 | Record | Main fields | Rules and coverage |
 | --- | --- | --- |
 | Contact frame | Device ID, sequence, monotonic timestamp, contact IDs, positions, classification | Complete frames only. RF-2, RF-3, RF-5, RF-7. |
-| Gesture policy | Shared start/continuation threshold, tap limits, grace duration, expiry precedence, ordinary-pointing motion values | T01 through T04 approve recognition, grace, and motion behavior. RF-2 through RF-7. |
+| Gesture policy | Start threshold, tap limits, grace duration, expiry precedence, ordinary-pointing motion values | Continuation requires contact return, not a threshold. RF-2 through RF-7. |
 | Gesture state | Phase, valid contact identities, start baseline, continuation baseline, motion baseline, grace deadline, timer generation | Keep recognition baselines fixed for each contact group. No disk serialization. RF-2 through RF-7. |
 | Tap candidate | Contact identity, initial position, touchdown time, maximum displacement, cancellation state, all-contacts-lifted eligibility | Keep in memory. Reset after the required zero-contact state. RF-7. |
 | Output state | Desired button state, submitted button state, held output button, release pending, owning device and session identities, cleanup evidence | Keep cleanup separate and session-bound. Submission alone is not desktop confirmation. RF-2, RF-4, RF-7, RF-9. |
@@ -541,7 +560,7 @@ Fail startup on invalid configuration before device acquisition, leaving normal 
 Include the file, cause, and field when possible, with corrective guidance.
 Check for duplicate object members before decoding into records. Unknown-field rejection alone does not detect duplicates.
 Retain one validated settings snapshot for the process lifetime. Do not watch or reload the file during execution.
-Use `grace_period_ms` for the grace duration, with a default of 300 ms when absent.
+Use `grace_period_ms` for the grace duration, with a default of 500 ms when absent.
 Accept only finite JSON numbers greater than zero. Reject zero, negative, nonnumeric, and nonfinite values.
 Do not write the implicit default to disk.
 
@@ -550,7 +569,7 @@ If the setting is absent, use 1 mm without writing an implicit default to disk.
 Accept only a finite JSON number greater than zero. Reject strings, booleans, null, zero, negative values, and nonfinite values.
 Do not convert numeric strings into numbers.
 Pass the validated threshold to gesture logic as a policy value, without exposing configuration access to that package.
-Use this same threshold for continuation. Do not introduce a separate continuation setting.
+This threshold applies only to drag start. Continuation requires no displacement threshold.
 
 Use `ending_tap_max_duration_ms` for the ending-tap duration limit, with a default of 200 ms.
 Use `ending_tap_max_displacement_mm` for the ending-tap displacement limit, with a default of 1 mm.
@@ -750,16 +769,13 @@ The utility does not move files directly, edit selections, or command arbitrary 
 
 Coverage: RF-5, RF-6.
 
-1. Process grace expiry before movement at or after its deadline.
-2. Before expiry, discard the continuation baseline if valid contact count or identities change.
-3. If exactly three valid contacts remain without a baseline, store their identities and average position in millimeters.
-4. On subsequent frames, measure straight-line displacement from that fixed baseline. Do not accumulate traveled distance.
-5. Below the shared drag-start threshold, preserve the pause and deadline.
-6. At or above the threshold strictly before expiry, cancel the current timer generation.
-7. Enter dragging without releasing or pressing the button again.
-8. Establish the motion baseline at the threshold-crossing event's group position.
-9. Discard all movement through that event, including repositioning displacement and threshold overshoot.
-10. Emit motion only for subsequent group changes, using the ordinary-pointing mapping.
+1. Process grace expiry before contact return at or after its deadline.
+2. If valid contact count differs from three, preserve the pause and fixed deadline.
+3. If exactly three valid contacts return before expiry, cancel the current timer generation immediately.
+4. Enter dragging without another press or release, even if all contacts are stationary.
+5. Establish the motion baseline at the returning group's average position.
+6. Discard displacement through that return event, including finger repositioning.
+7. Emit motion only for subsequent group changes, without another recognition threshold.
 
 A later departure from three contacts creates a new grace deadline under the move-and-pause procedure.
 
@@ -948,29 +964,29 @@ Verify that canceled candidates cannot emit ending-tap results when their origin
 ### T03 acceptance scenarios
 
 Coverage: RF-5, RF-6, and RF-7. These scenarios define future deterministic tests.
-Use a 300 ms grace duration and a 1 mm shared movement threshold unless stated otherwise.
+Use a 500 ms grace duration and a 1 mm drag-start threshold unless stated otherwise.
 Times below are relative to the first interruption.
 
 | Scenario | Expected result |
 | --- | --- |
-| No grace setting is present | Use 300 ms without writing configuration. |
+| No grace setting is present | Use 500 ms without writing configuration. |
 | Grace duration is configured to 500 ms | Set the deadline 500 ms after the interruption. |
 | Grace duration is zero, negative, nonnumeric, or nonfinite | Reject configuration and fail startup before taking device control. |
-| Dragging changes from three contacts to zero, one, two, or four | Pause movement and set one deadline at 300 ms. |
-| Two remaining contacts lift at 100 ms | Preserve the original 300 ms deadline. |
+| Dragging changes from three contacts to zero, one, two, or four | Pause movement and set one deadline at 500 ms. |
+| Two remaining contacts lift at 100 ms | Preserve the original 500 ms deadline. |
 | Contacts repeatedly change during grace | Reset affected continuation baselines without extending the deadline. |
-| Three contacts return at 100 ms and remain stationary | Remain paused and release at 300 ms. |
+| Three contacts return at 100 ms and remain stationary | Cancel grace immediately and retain the hold without pointer movement. |
 | Three contacts return at a different touchpad position | Establish a fresh baseline without moving the pointer. |
-| Group displacement reaches 0.99 mm at 299 ms | Remain paused. Release at 300 ms unless another qualifying event occurs earlier. |
-| Group displacement reaches 1 mm at 299 ms | Continue the same drag and cancel the timer. |
-| Group displacement reaches 1 mm at 300 ms or later | Expiry wins. Release once without continuing the expired drag. |
+| Three contacts return at 499 ms | Continue immediately without requiring displacement. |
+| After continuation the group moves 0.5 mm | Move the pointer normally despite being below the start threshold. |
+| Three contacts return at 500 ms or later | Expiry wins. Release once without continuing the expired drag. |
 | A valid ending tap lifts at 299 ms | End through the tap and cancel the timer. Generate no additional click. |
-| A valid candidate lifts at exactly 300 ms | End through expiry once, without recognizing an ending tap. |
-| Three contacts return, move 0.6 mm, then one contact changes identity | Discard displacement. Establish a fresh baseline while preserving the deadline. |
-| Displacement repeatedly returns to zero without reaching 1 mm | Do not continue, regardless of total traveled distance. |
-| The shared threshold is configured to 2 mm | Require 2 mm for both drag start and continuation. |
-| Continuation succeeds at 200 ms, then another interruption occurs at 250 ms | Set the new deadline to 550 ms. |
-| The canceled first timer fires at 300 ms after that continuation | Ignore its stale generation. Preserve the new deadline. |
+| A valid candidate lifts at exactly 500 ms | End through expiry once, without recognizing an ending tap. |
+| Three contacts return, then one contact changes identity without changing the count | Apply RF-3's motion-baseline reset without starting grace. |
+| Returned contacts remain still beyond the old deadline | Retain the hold. No grace timer remains active. |
+| The start threshold is configured to 2 mm | Require 2 mm only for initial drag start. |
+| Continuation succeeds at 200 ms, then another interruption occurs at 250 ms | Set the new deadline to 750 ms. |
+| The canceled first timer fires at 500 ms after that continuation | Ignore its stale generation. Preserve the new deadline. |
 
 Also test a detected palm beside the returning group. It must change neither baseline nor deadline.
 Use injected monotonic time to verify exact-deadline precedence independently of callback ordering.
@@ -992,7 +1008,7 @@ Coverage: RF-2, RF-3, RF-4, and RF-6. These scenarios define future tests, not e
 | A contact identity changes while three valid contacts remain | Keep the hold and reset the motion baseline. Emit no replacement movement or grace timer. |
 | The new group then moves less than the start threshold | Move normally. Contact replacement during dragging requires no new recognition threshold. |
 | Three active-drag contacts stop for longer than the grace duration | Stop pointer motion and retain the hold. No grace timer starts. |
-| Three contacts return during grace and remain stationary | Preserve T03's deadline and release at expiry. |
+| Three contacts return during grace and remain stationary | Cancel grace and retain the hold without pointer movement. |
 
 Use deterministic effect tests for threshold, baseline, and stationary-contact rules.
 Use desktop comparisons for sensitivity, acceleration, and button mapping. A successful output write alone cannot prove these behaviors.
@@ -1149,11 +1165,11 @@ For 100 samples, nearest-rank p95 is the 95th sample after sorting by duration.
 A missing response is a failed observation, not a sample to omit or a successful output submission.
 Do not substitute the time the utility notices restored output for the independently established release opportunity.
 Record unavailable-output waiting separately from measured cleanup response. It does not satisfy cleanup by itself.
-Do not time nonexistent pointer output at the continuation threshold. T04 requires the pointer to remain still there.
+Do not time nonexistent pointer output at the continuation return event. The pointer must remain still there.
 Owner-disappearance confirmation remains a separate T05 cleanup test, not a synthetic button-release latency sample.
 
 For pointer comparison, use matched displacement and speed with the same Linux touchpad, display scale, and settings.
-Compare active-motion distances after recognition. Do not count the discarded start or continuation threshold movement as pointer travel.
+Compare active-motion distances after recognition. Exclude discarded start-threshold and continuation-return displacement from pointer travel.
 Use logical desktop pixels consistently. Convert physical display measurements using the recorded display scale when necessary.
 Calculate the allowed distance error as the larger of 0.05 times the one-finger reference distance and 2 logical pixels.
 Check direction separately and preserve the no-repositioning-jump requirement.
@@ -1216,7 +1232,7 @@ Coverage: RF-1 through RF-9. These scenarios define future tests, not executed i
 | A reused device node belongs to another device | Do not treat it as the selected device's return. |
 | A termination event shares a timestamp with start or continuation movement | Termination prevents that movement from starting or continuing the gesture. |
 | Physical press and expiry coincide during grace | Preserve physical-button consumption without duplicate successful drag releases. |
-| One report departs from three contacts and the next returns | Start grace immediately and apply the continuation threshold to a fresh baseline. |
+| One report departs from three contacts and the next returns before expiry | Start grace, then cancel it on return and reset the motion baseline. |
 | A detected palm appears beside three valid contacts | Ignore it without a valid-count transition. |
 | Input synchronization is lost or an output write fails | Terminate and apply cleanup. Resynchronization alone cannot resume the gesture. |
 | Enable repeats during dragging or grace | Preserve phase, baselines, hold, and existing deadline. |
@@ -1304,7 +1320,7 @@ Coverage: RF-1 through RF-9. Constitution principle 4.
 | Stage | Output | Coverage |
 | --- | --- | --- |
 | 1 | Approved specification corrections, behavior rules, and compatibility baseline. | RF-1 through RF-9 |
-| 2 | Evidence that the provisional input backend satisfies its feasibility conditions. | RF-1, RF-2, RF-3, RF-6, RF-7, RF-8, RF-9 |
+| 2 | User-approved backend adoption with recorded evidence and explicit T25/T27 deferrals. Complete missing validation before release. | RF-1, RF-2, RF-3, RF-6, RF-7, RF-8, RF-9 |
 | 3 | Gesture model and deterministic behavioral tests. | RF-2 through RF-7 |
 | 4 | Verified input routing, output handling, and failure cleanup. | RF-1 through RF-9 |
 | 5 | Approved configuration, command interface, and atomic persistence. | RF-1, RF-8, RF-9, NFR-5 through NFR-8 |

@@ -48,8 +48,28 @@ Enable the systemd user service to run the program at startup:
 ├── AGENTS.md
 ├── docs
 │   └── constitution.md
+├── experiments
+│   └── inputprobe
+│       ├── drag.go
+│       ├── drag_runtime.go
+│       ├── drag_runtime_test.go
+│       ├── drag_test.go
+│       ├── main.go
+│       ├── main_test.go
+│       ├── native.c
+│       ├── native.go
+│       ├── native.h
+│       ├── native_integration_test.go
+│       ├── README.md
+│       ├── steady.go
+│       ├── steady_test.go
+│       ├── transfer.go
+│       ├── transfer_test.go
+│       ├── travel.go
+│       └── travel_test.go
 ├── go.mod
 ├── LICENSE
+├── Makefile
 ├── opencode.jsonc
 ├── README.md
 ├── skills
@@ -57,12 +77,12 @@ Enable the systemd user service to run the program at startup:
 │       └── SKILL.md
 └── specs
     └── 001-three-finger-drag
-        ├── environment-evidence.md
         ├── plan.md
+        ├── results-summary.md
         ├── spec.md
         └── tasks.md
 
-5 directories, 11 files
+7 directories, 29 files
 ```
 
 ## License

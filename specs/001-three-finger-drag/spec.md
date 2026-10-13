@@ -2,6 +2,18 @@
 
 ## Context and objective
 
+### October 13 revision: one-finger return
+
+Fresh one-finger return replaces ending-tap recognition throughout this specification.
+After all valid contacts lift during grace, a fresh single valid contact immediately releases the drag and restores ordinary pointing.
+Three valid contacts returning together before the 500 ms deadline continue the same drag without a movement threshold.
+A return first reported as one contact ends the drag even if more contacts follow.
+A remaining finger during the initial lift does not trigger this rule. The utility must first observe zero valid contacts.
+The ended gesture cannot resume. New drag recognition requires a subsequent zero-contact state under the normal rearming rules.
+Release must precede forwarding the returning finger to ordinary input. Failed release follows RF-9 cleanup.
+The former ending-tap duration and displacement settings are removed and rejected as unknown configuration settings.
+Earlier ending-tap wording and examples below are superseded by this revision pending documentation consolidation.
+
 Touchpad users need to drag files, select text, and move windows without a physical press.
 The objective is to match the macOS three-finger drag experience.
 The first release supports Arch Linux and CachyOS with Hyprland on Wayland.
@@ -50,7 +62,7 @@ The team must verify the specified timing limits and compare observable behavior
 - **Qualifying start movement:** Group displacement that reaches or exceeds the configured threshold while the same three valid contacts remain.
 - **Grace deadline:** The time of the first contact-count departure from three during dragging, plus the configured grace duration.
 - **Continuation baseline:** The group position when exactly three valid contacts form the current group during the grace period.
-- **Qualifying continuation movement:** Displacement from the continuation baseline that reaches the drag-start threshold while the same three valid contacts remain.
+- **Qualifying continuation:** Exactly three valid contacts return strictly before the grace deadline. Movement is not required.
 - **Logical primary button:** The desktop button action for ordinary selection and dragging, including the desktop's left-handed mapping.
 - **Motion baseline:** The group position used to measure subsequent relative pointer movement during dragging.
 - **Selected touchpad:** The single touchpad that supplies contacts and physical-button events to this feature. Other touchpads retain normal desktop behavior.
@@ -102,10 +114,8 @@ Coverage: RF-1, RF-2, RF-5, RF-7, and RF-9.
 | --- | --- | --- |
 | Configuration version | 1 | Integer 1 only |
 | Enabled startup | Enabled | Boolean |
-| Drag-start and continuation threshold | 1 mm | Finite positive number, subject to conversion bounds |
-| Grace duration | 300 ms | Finite positive number, subject to conversion bounds |
-| Ending-tap duration limit | 200 ms | Finite positive number, subject to conversion bounds |
-| Ending-tap displacement limit | 1 mm | Finite positive number, subject to conversion bounds |
+| Drag-start threshold | 1 mm | Finite positive number, subject to conversion bounds |
+| Grace duration | 500 ms | Finite positive number, subject to conversion bounds |
 | Touchpad selection | Automatic when exactly one compatible touchpad exists | Explicit identification of one compatible touchpad |
 
 - IF the configuration file is missing, THEN the utility SHALL use defaults without creating a file.
@@ -160,7 +170,7 @@ Runtime device loss follows RF-9 and the same-device recovery rules below.
 The threshold applies in every direction and measures touchpad distance, not screen distance.
 Detected palms do not change the valid contact count, group position, or baseline.
 The 1 mm default requires comparison with macOS before any equivalence claim.
-Invalid configuration fails startup under RF-1. RF-6 uses this same threshold for continuation.
+Invalid configuration fails startup under RF-1. RF-6 requires no movement threshold for continuation.
 
 #### Enablement and rearming
 
@@ -245,8 +255,8 @@ Target disappearance does not guarantee undo. The utility does not restore the c
 - WHILE the grace period is active, the utility SHALL keep the drag action held.
 - WHILE the grace period is active, the utility SHALL pause gesture-driven pointer movement until RF-6 applies.
 - WHILE the grace period is active, WHEN contacts change, the utility SHALL preserve the existing deadline.
-- WHILE three valid contacts remain stationary during the grace period, the utility SHALL keep the existing timer running.
-- WHERE no grace duration is configured, the utility SHALL use 300 ms.
+- WHEN exactly three valid contacts return before expiry, the utility SHALL cancel the grace timer even without movement.
+- WHERE no grace duration is configured, the utility SHALL use 500 ms.
 - WHEN reading configuration, the utility SHALL accept a grace duration in milliseconds as a finite number greater than zero.
 - IF the configured grace duration is zero, negative, nonnumeric, or nonfinite, THEN the utility SHALL reject that value.
 
@@ -264,17 +274,17 @@ The default requires comparison with macOS. RF-1 rejects invalid configuration a
 - WHILE the grace period is active, WHEN exactly three valid contacts form a group, the utility SHALL establish its continuation baseline.
 - WHILE the grace period is active, WHEN contact count or identities change, the utility SHALL discard the previous continuation baseline.
 - WHEN exactly three valid contacts remain after that change, the utility SHALL establish a fresh continuation baseline during grace.
-- WHEN qualifying continuation movement occurs strictly before the grace deadline, the utility SHALL continue the same drag.
-- WHILE continuation displacement remains below the drag-start threshold, the utility SHALL preserve the pause and the grace deadline.
+- WHEN exactly three valid contacts return strictly before the grace deadline, the utility SHALL immediately continue the same drag.
+- WHEN continuing a drag, the utility SHALL require no additional movement threshold.
 - WHEN a drag continues, the utility SHALL cancel the current grace period.
 - WHEN a drag continues, the utility SHALL keep the drag action held without an intervening release.
 - WHEN repositioned fingers resume movement, the utility SHALL prevent a pointer jump caused solely by their new contact positions.
-- WHEN continuation qualifies, the utility SHALL discard movement through the threshold-crossing event and retain the current pointer position.
+- WHEN continuation qualifies, the utility SHALL discard displacement through the return event and retain the current pointer position.
 - WHEN continuation qualifies, the utility SHALL reset the motion baseline and use only subsequent group movement for pointer motion.
 
-Continuation uses straight-line displacement of the group's average position in touchpad millimeters, not accumulated traveled distance.
-Individual fingers may remain stationary. The shared threshold defaults to 1 mm and follows the drag-start configuration.
-Contact changes reset the continuation baseline without changing the deadline. Detected palms do not change valid contacts.
+Returning three contacts resets the movement baseline at their new average position without moving the pointer.
+Subsequent movement follows RF-3. Stationary returned contacts retain the hold without a grace timer.
+Changes that do not restore exactly three valid contacts preserve the existing deadline. Detected palms do not count.
 
 ### RF-7: End a drag
 
@@ -517,7 +527,7 @@ Timing differences remain subject to T10's separate timing rules.
 | Movement occurs before the third valid contact arrives | Exclude that movement from group displacement. |
 | One finger moves while two remain stationary | Start when their average position reaches the configured displacement threshold. |
 | Group displacement equals the threshold | Start the drag. |
-| A movement event crosses the start or continuation threshold | Discard all movement through that event. Move only on subsequent group movement. |
+| Start movement crosses its threshold, or three contacts return during grace | Discard displacement through that event. Move only on subsequent group movement. |
 | Left-handed mode swaps physical buttons | Hold the logical primary button for normal selection and dragging. |
 | Natural-scrolling direction changes | Preserve ordinary pointer direction. |
 | Contact identities change during dragging while the count stays three | Keep the hold, reset the motion baseline, and discard replacement displacement. |
@@ -529,12 +539,12 @@ Timing differences remain subject to T10's separate timing rules.
 | A configured threshold is zero, negative, nonnumeric, or nonfinite | Reject configuration and fail startup while preserving normal touchpad handling. |
 | Contact count first departs from three during dragging | Start the grace period, including when all fingers lift. |
 | Contacts change again during grace, including all remaining fingers lifting | Preserve the original deadline. |
-| Qualifying continuation movement occurs before expiry | Continue the same drag without an intervening release and cancel the timer. |
-| Three fingers return but remain stationary | Preserve the pause and deadline. |
-| Continuation displacement stays below the shared threshold | Preserve the pause and deadline. |
+| Exactly three valid contacts return before expiry | Continue the same drag without an intervening release and cancel the timer. |
+| Three fingers return but remain stationary before expiry | Cancel grace and keep the hold. Do not move the pointer. |
+| Movement after return is below the drag-start threshold | Move normally without another threshold. |
 | Contact identities change during grace while three contacts remain | Reset the continuation baseline without changing the deadline. |
 | Dragging resumes, then the contact count departs from three again | Start a new grace period from the new interruption. |
-| No grace duration is configured | Use 300 ms. |
+| No grace duration is configured | Use 500 ms. |
 | Grace duration is zero, negative, nonnumeric, or nonfinite | Reject configuration and fail startup while preserving normal touchpad handling. |
 | Grace expires with contacts remaining | End the drag. Require all valid contacts to lift before a new RF-2 gesture. |
 | A drag completes with zero valid contacts | The zero-contact requirement is already satisfied for the next gesture. |
@@ -629,10 +639,10 @@ Timing differences remain subject to T10's separate timing rules.
 
 - **T12:** Same-device recovery, termination priority, immediate contact transitions, failure coverage, repeated commands, and late tap-lift rules complete the consistency review.
 - **T11:** RF-1 defines defaults, strict validation, restart-only configuration, and explicit or unambiguous automatic touchpad selection.
-- **OQ-1 (T03):** Default to a configurable 300 ms grace period. Accept only finite numeric durations greater than zero.
+- **OQ-1 (T03, revised October 13):** Default to a configurable 500 ms grace period. Accept only finite numeric durations greater than zero.
 - **OQ-2 (T02):** Use a fresh one-finger tap, recognized on lift. RF-7 defines configurable 200 ms and 1 mm limits.
 - **OQ-3 (T01):** Use group displacement with a configurable 1 mm default. RF-2 defines contact validity, staggered placement, and baseline resets.
-- **OQ-4 (T03):** Preserve each grace deadline until continuation or termination. Require qualifying movement before expiry. Expiry wins exact-time ties.
+- **OQ-4 (T03, revised October 13):** Three valid contacts returning before expiry immediately cancel grace. No movement threshold applies. Expiry wins ties.
 - **OQ-5 (T06):** Recover enabled dragging automatically after access, cleanup, and zero-contact checks. Never resume a terminated gesture.
 - **OQ-6 (T06):** Default startup to enabled. Runtime enable/disable commands override configuration until restart. Disablement terminates active drags immediately.
 - **OQ-7 (T07):** Touchpad presses terminate and are consumed. Other devices remain independent. Use one selected touchpad and reject duplicate instances.

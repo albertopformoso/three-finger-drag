@@ -81,14 +81,14 @@ T03 resolves finger lift exactly at grace expiry: expiry takes priority.
 
 The user approved these decisions in the T03 clarification discussion:
 
-- Default to a 300 ms grace period, configurable through the configuration file.
+- Default to a 500 ms grace period, configurable through the configuration file (revised October 13).
 - Accept only finite numeric durations greater than zero.
 - Start the deadline on the first departure from three valid contacts during dragging outside grace.
 - Further contact changes, including complete lifting, do not restart or extend the deadline.
-- Stationary three-contact returns preserve the pause and timer.
+- Stationary three-contact returns before expiry cancel the timer and retain the same drag (revised October 13).
 - Establish a fresh continuation baseline when exactly three valid contacts return.
 - Contact count or identity changes reset the continuation baseline without changing the deadline.
-- Continue at the shared drag-start displacement threshold, strictly before expiry.
+- Continue on exactly three valid contacts returning strictly before expiry, without another movement threshold (revised October 13).
 - Successful continuation cancels the timer. A later interruption starts a new grace period.
 - Expiry wins exact-time ties with movement or ending-tap lift. Release once.
 
@@ -238,7 +238,7 @@ T10 completes acceptance-policy decisions, not performance tests or macOS measur
 The user approved these decisions in the T11 clarification discussion:
 
 - Missing configuration and omitted settings use defaults without creating a file.
-- Defaults are enabled startup, a 1 mm drag threshold, 300 ms grace, and ending-tap limits of 200 ms and 1 mm.
+- Defaults are enabled startup, a 1 mm drag-start threshold, 500 ms grace, and ending-tap limits of 200 ms and 1 mm.
 - Unreadable, malformed, or invalid configuration fails startup while preserving normal touchpad handling.
 - Report the file, cause, and setting when possible, with corrective guidance. Do not silently substitute defaults for invalid values.
 - File changes take effect only after restart. Runtime enable, disable, and cancel commands retain their existing behavior.
@@ -283,31 +283,33 @@ Machine installation and hardware procurement are external prerequisites, not hi
 Select one approved Linux session for initial experiments. Validate the other distribution during acceptance.
 
 Experiments may use existing tools or isolated prototypes after code authorization.
-A completed experiment records a pass or failure. Only passing evidence permits backend adoption at T29.
+A completed experiment records a pass or failure.
+The user approved backend adoption at T29 with T25 and T27 deferred from the implementation gate to release validation.
+This exception permits T30 to proceed. It does not change either experiment's status or the specification's release criteria.
 If an experiment needs more work, add a bounded follow-up task and update T29's dependencies.
 
 | Task | Description | RF coverage | Time | Depends on | Completion criteria | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| T13 | Check the prepared test environments. | RF-1, RF-4 | 20 min | T09 | Made when: Inventories record T09's exact Linux versions, touchpad capabilities, application backends, and fixed Mac hardware, build, and settings. Evidence: [environment assessment](environment-evidence.md). Local T13a is complete. Arch Linux and Mac inventories remain deferred. | partial |
+| T13 | Check the prepared test environments. | RF-1, RF-4 | 20 min | T09 | Made when: Inventories record T09's exact Linux versions, touchpad capabilities, application backends, and fixed Mac hardware, build, and settings. Evidence: [environment assessment](results-summary.md). Local T13a is complete. Arch Linux and Mac inventories remain deferred. | partial |
 | T14 | Define the native adapter API and dependency. | RF-1, RF-8, RF-9 | 25 min | T12 | Made when: The plan lists the required libevdev calls, version constraints, ownership rules, and dependency justification. Evidence: [native adapter contract](plan.md#t14-native-adapter-contract), checked against installed 1.14.0 headers. Backend feasibility remains unverified. | done |
-| T13a | Complete the CachyOS environment inventory. | RF-1, RF-4 | 20 min | T09 | Made when: Local versions, compatible touchpad evidence, and Thunar/Mousepad backends are verified. Evidence: [local inventory](environment-evidence.md). Static capabilities, both backends, and successful full-update output recorded. Functional device checks remain under T28. | done |
+| T13a | Complete the CachyOS environment inventory. | RF-1, RF-4 | 20 min | T09 | Made when: Local versions, compatible touchpad evidence, and Thunar/Mousepad backends are verified. Evidence: [local inventory](results-summary.md). Static capabilities, both backends, and successful full-update output recorded. Functional device checks remain under T28. | done |
 | T13b | Complete the Arch Linux environment inventory. | RF-1, RF-4 | 20 min | T09 | Made when: Arch versions, touchpad capabilities, and both application backends have evidence. User deferred this environment. | - |
 | T13c | Complete the native macOS reference inventory. | RF-1, RF-4 | 20 min | T09 | Made when: Mac model, trackpad, build, fixed settings, Finder, and TextEdit have evidence. User deferred this inventory. | - |
-| T15 | Establish a bounded experiment harness. | RF-1, RF-8, RF-9 | 30 min | T13a, T14 | Made when: The harness can open and close one synthetic device on CachyOS without recording input or capturing unrelated devices. | - |
-| T16 | Probe virtual-touchpad recognition. | RF-1, RF-8 | 25 min | T15 | Made when: Evidence records Hyprland recognition, seat assignment, capabilities, axis ranges, resolution, and applicable settings. | - |
-| T17 | Probe virtual-pointer recognition. | RF-1, RF-3, RF-4 | 25 min | T15 | Made when: Evidence records pointer recognition, seat assignment, primary-button behavior, and relative-motion delivery. | - |
-| T18 | Probe exclusive physical-input ownership. | RF-1, RF-8 | 25 min | T16 | Made when: Evidence records grab acquisition, duplicate-event suppression, virtual-device exclusion, and ownership release. | - |
-| T19 | Compare ordinary one-finger pointing. | RF-8 | 20 min | T18 | Made when: A repeatable comparison records pointing behavior with and without the proxy under identical settings. | - |
-| T20 | Compare ordinary two-finger scrolling. | RF-8 | 20 min | T18 | Made when: A repeatable comparison records scrolling behavior with and without the proxy under identical settings. | - |
-| T21 | Probe one-contact to three-contact ownership transfer. | RF-2, RF-8 | 30 min | T17, T19 | Made when: Evidence records whether transfer causes an extra click, pointer jump, stale contact, or competing action. | - |
-| T22 | Probe two-contact to three-contact ownership transfer. | RF-2, RF-8 | 30 min | T17, T20 | Made when: Evidence records whether transfer leaves scrolling, stale contacts, or competing gestures active. | - |
-| T23 | Probe ending-tap suppression. | RF-7, RF-8 | 25 min | T21, T22 | Made when: Evidence records drag release and whether the desktop receives an additional click. | - |
-| T24 | Probe contact repositioning and return to ordinary input. | RF-5, RF-6, RF-8 | 30 min | T21, T22 | Made when: Evidence records continuation displacement and stale-contact behavior after release. | - |
-| T25 | Probe drag-motion scaling. | RF-3, RF-6 | 25 min | T17, T24 | Made when: Measurements identify acceleration stages and show whether fractional motion meets the approved mapping. | - |
-| T26 | Probe process and virtual-device teardown. | RF-7, RF-9 | 25 min | T17, T18 | Made when: Evidence records button state and ordinary-input restoration after graceful exit and forced termination. | - |
-| T27 | Probe desktop-session loss and restoration. | RF-9 | 25 min | T26 | Made when: Evidence records cleanup behavior and whether stale movement or releases cross session boundaries. | - |
-| T28 | Probe contact classification on baseline hardware. | RF-1, RF-2, RF-5, RF-8 | 25 min | T18 | Made when: Evidence identifies palm, thumb, noise, and partial-multitouch behavior against the approved device baseline. | - |
-| T29 | Approve or reject the provisional backend. | RF-1 through RF-9 | 25 min | T19 through T28 | Made when: All eight plan feasibility conditions pass and the plan records backend adoption with evidence links. | - |
+| T15 | Establish a bounded experiment harness. | RF-1, RF-8, RF-9 | 30 min | T13a, T14 | Made when: The harness can open and close one synthetic device on CachyOS without recording input or capturing unrelated devices. Evidence: [host lifecycle result](results-summary.md). Idle pointer creation and Hyprland appearance/disappearance verified. | done |
+| T16 | Probe virtual-touchpad recognition. | RF-1, RF-8 | 25 min | T15 | Made when: Evidence records Hyprland recognition, seat assignment, capabilities, axis ranges, resolution, and applicable settings. Evidence: [recognition observations](results-summary.md). Functional settings fidelity remains for subsequent probes. | done |
+| T17 | Probe virtual-pointer recognition. | RF-1, RF-3, RF-4 | 25 min | T15 | Made when: Evidence records pointer recognition, seat assignment, primary-button behavior, and relative-motion delivery. Evidence: [pointer observations](results-summary.md). Current-session selection, hold/release, seat, and rightward motion verified. Left-handed mapping remains unverified. | done |
+| T18 | Probe exclusive physical-input ownership. | RF-1, RF-8 | 25 min | T16 | Made when: Evidence records grab acquisition, duplicate-event suppression, virtual-device exclusion, and ownership release. Evidence: [physical ownership observations](results-summary.md). Acquisition, motion suppression, restoration, and virtual-device rejection verified. | done |
+| T19 | Compare ordinary one-finger pointing. | RF-8 | 20 min | T18 | Made when: A repeatable comparison records pointing behavior with and without the proxy under identical settings. Evidence: [initial pointing comparison](results-summary.md). Qualitative comparison, restoration, and matching exposed metadata recorded. Numerical equivalence remains T25. | done |
+| T20 | Compare ordinary two-finger scrolling. | RF-8 | 20 min | T18 | Made when: A repeatable comparison records scrolling behavior with and without the proxy under identical settings. Evidence: [initial scrolling comparison](results-summary.md). No apparent difference, normal restoration, and matching exposed metadata recorded. | done |
+| T21 | Probe one-contact to three-contact ownership transfer. | RF-2, RF-8 | 30 min | T17, T19 | Made when: Evidence records whether transfer causes an extra click, pointer jump, stale contact, or competing action. Evidence: [full one-finger handoff](results-summary.md). Full selection and ordinary pointing restoration reported as expected. | done |
+| T22 | Probe two-contact to three-contact ownership transfer. | RF-2, RF-8 | 30 min | T17, T20 | Made when: Evidence records whether transfer leaves scrolling, stale contacts, or competing gestures active. Evidence: [full scrolling-to-drag observation](results-summary.md). Full transfer and ordinary input restoration reported as expected. | done |
+| T23 | Probe fresh one-finger release and ordinary pointing. | RF-7, RF-8 | 25 min | T21, T22 | Made when: After all contacts lift, a fresh single contact releases the hold and restores ordinary pointing. Three-contact return still continues within grace. Evidence: [revised release observation](results-summary.md). Twelve single-finger endings and four continuations observed with expected behavior. | done |
+| T24 | Probe contact repositioning and return to ordinary input. | RF-5, RF-6, RF-8 | 30 min | T21, T22 | Made when: Evidence records continuation displacement and stale-contact behavior after release. Evidence: [repositioning review](results-summary.md). Qualitative continuation and ordinary-input restoration confirmed. Numerical motion comparison remains T25. | done |
+| T25 | Probe drag-motion scaling. | RF-3, RF-6 | 25 min | T17, T24 | Made when: Measurements identify acceleration stages and show whether fractional motion meets the approved mapping. Evidence: [measurement preparation](results-summary.md). Tools built and tested. Matched physical observations pending. | partial |
+| T26 | Probe process and virtual-device teardown. | RF-7, RF-9 | 25 min | T17, T18 | Made when: Evidence records button state and ordinary-input restoration after graceful exit and forced termination. Evidence: [forced termination](results-summary.md). Active selection ended and ordinary pointing/scrolling returned after Ctrl+C and SIGKILL. | done |
+| T27 | Probe desktop-session loss and restoration. | RF-9 | 25 min | T26 | Made when: Evidence records cleanup behavior and whether stale movement or releases cross session boundaries. User deferred this experiment. Required before release. | - |
+| T28 | Probe contact classification on baseline hardware. | RF-1, RF-2, RF-5, RF-8 | 25 min | T18 | Made when: Evidence identifies palm, thumb, noise, and partial-multitouch behavior against the approved device baseline. Evidence: [final classification disposition](results-summary.md). Valid scenarios passed. Two incorrect-placement runs retained as user-reported setup deviations. | done |
+| T29 | Approve or reject the provisional backend. | RF-1 through RF-9 | 25 min | T19 through T24, T26, T28 | Made when: The plan records explicit user approval, evidence, and T25/T27 release-validation obligations. Revised gate approved October 13. Evidence: [adoption decision](results-summary.md). | done |
 
 If the backend fails, mark T29 `partial` or `declined` with the reason.
 Revise the plan and task dependencies before production implementation. Failed experiments do not establish feasibility.

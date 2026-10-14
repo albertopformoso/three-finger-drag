@@ -4,9 +4,12 @@
 
 ### October 13 revision: one-finger return
 
+The latest approved default grace period is 800 ms, replacing the earlier 500 ms experiment default.
+Configuration may override this duration. Expiry still takes priority at the exact deadline.
+
 Fresh one-finger return replaces ending-tap recognition throughout this specification.
 After all valid contacts lift during grace, a fresh single valid contact immediately releases the drag and restores ordinary pointing.
-Three valid contacts returning together before the 500 ms deadline continue the same drag without a movement threshold.
+Three valid contacts returning together before the 800 ms default deadline continue the same drag without a movement threshold.
 A return first reported as one contact ends the drag even if more contacts follow.
 A remaining finger during the initial lift does not trigger this rule. The utility must first observe zero valid contacts.
 The ended gesture cannot resume. New drag recognition requires a subsequent zero-contact state under the normal rearming rules.
@@ -115,7 +118,7 @@ Coverage: RF-1, RF-2, RF-5, RF-7, and RF-9.
 | Configuration version | 1 | Integer 1 only |
 | Enabled startup | Enabled | Boolean |
 | Drag-start threshold | 1 mm | Finite positive number, subject to conversion bounds |
-| Grace duration | 500 ms | Finite positive number, subject to conversion bounds |
+| Grace duration | 800 ms | Finite positive number, subject to conversion bounds |
 | Touchpad selection | Automatic when exactly one compatible touchpad exists | Explicit identification of one compatible touchpad |
 
 - IF the configuration file is missing, THEN the utility SHALL use defaults without creating a file.
@@ -256,7 +259,7 @@ Target disappearance does not guarantee undo. The utility does not restore the c
 - WHILE the grace period is active, the utility SHALL pause gesture-driven pointer movement until RF-6 applies.
 - WHILE the grace period is active, WHEN contacts change, the utility SHALL preserve the existing deadline.
 - WHEN exactly three valid contacts return before expiry, the utility SHALL cancel the grace timer even without movement.
-- WHERE no grace duration is configured, the utility SHALL use 500 ms.
+- WHERE no grace duration is configured, the utility SHALL use 800 ms.
 - WHEN reading configuration, the utility SHALL accept a grace duration in milliseconds as a finite number greater than zero.
 - IF the configured grace duration is zero, negative, nonnumeric, or nonfinite, THEN the utility SHALL reject that value.
 

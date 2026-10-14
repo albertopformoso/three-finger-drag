@@ -68,6 +68,15 @@ Enable the systemd user service to run the program at startup:
 │       ├── travel.go
 │       └── travel_test.go
 ├── go.mod
+├── internal
+│   ├── gesture
+│   │   ├── contacts.go
+│   │   ├── contacts_test.go
+│   │   ├── engine.go
+│   │   ├── engine_boundaries_test.go
+│   │   ├── engine_test.go
+│   │   └── model.go
+│   └── README.md
 ├── LICENSE
 ├── Makefile
 ├── opencode.jsonc
@@ -82,7 +91,7 @@ Enable the systemd user service to run the program at startup:
         ├── spec.md
         └── tasks.md
 
-7 directories, 29 files
+9 directories, 36 files
 ```
 
 ## License

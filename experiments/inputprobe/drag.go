@@ -148,7 +148,7 @@ func (d *dragMachine) step(now time.Duration, all []contact, buttons int) dragEf
 	case dragMoving:
 		if n != 3 {
 			d.phase = dragGrace
-			d.deadline = now + 500*time.Millisecond
+			d.deadline = now + 800*time.Millisecond
 			d.ids = nil
 			d.graceReturned = false
 			d.stats.GraceEntries++

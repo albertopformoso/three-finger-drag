@@ -2,7 +2,7 @@
 
 fmt:
 	pkg-config --atleast-version=1.14.0 libevdev
-	gofmt -w experiments/inputprobe/*.go
+	go fmt ./...
 	go vet ./...
 
 test:

@@ -52,10 +52,10 @@ func TestDragMachine(t *testing.T) {
 	t.Run("expiry wins exact continuation boundary", func(t *testing.T) {
 		d := started(t)
 		d.step(10*time.Millisecond, nil, 0)
-		if !d.step(510*time.Millisecond, fingers(101), 0).release {
+		if !d.step(810*time.Millisecond, fingers(101), 0).release {
 			t.Fatal("expiry lost")
 		}
-		if d.step(520*time.Millisecond, fingers(102), 0).press {
+		if d.step(820*time.Millisecond, fingers(102), 0).press {
 			t.Fatal("rearmed with contacts down")
 		}
 	})
@@ -74,7 +74,7 @@ func TestDragMachine(t *testing.T) {
 	t.Run("stationary return resumes and subsequent small motion moves", func(t *testing.T) {
 		d := started(t)
 		d.step(10*time.Millisecond, nil, 0)
-		e := d.step(499*time.Millisecond, fingers(100), 0)
+		e := d.step(799*time.Millisecond, fingers(100), 0)
 		if e.press || e.release || e.dx != 0 || d.stats.Continuations != 1 {
 			t.Fatal(e, d.stats)
 		}
@@ -103,10 +103,10 @@ func TestDragMachine(t *testing.T) {
 		if d.step(200*time.Millisecond, fingers(1)[:1], 0).release {
 			t.Fatal("remaining finger released")
 		}
-		if !d.tick(510 * time.Millisecond).release {
+		if !d.tick(810 * time.Millisecond).release {
 			t.Fatal("no expiry")
 		}
-		e := d.step(520*time.Millisecond, nil, 0)
+		e := d.step(820*time.Millisecond, nil, 0)
 		if e.forward || e.release || e.press {
 			t.Fatal(e)
 		}

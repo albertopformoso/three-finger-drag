@@ -1,5 +1,7 @@
 # Input Backend Probe
 
+The current probe grace default is 800 ms. Earlier 500 ms examples and recorded experiments retain their historical timing.
+
 This Linux/cgo experiment uses Go's standard library and the system libevdev library.
 It is a bounded feasibility probe for T15 onward, not the three-finger drag service.
 Native code stays behind the Go wrapper. No third-party Go module is required.

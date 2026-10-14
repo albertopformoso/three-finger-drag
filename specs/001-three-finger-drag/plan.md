@@ -2,6 +2,22 @@
 
 ## Status and scope
 
+### Isolated gesture core completion
+
+Section 3 now has deterministic implementation evidence in `internal/gesture/`.
+Recognition emits ordered logical-button, routing, timer, and physical-millimeter motion effects.
+Motion includes monotonic time and elapsed duration for the output mapper, without truncating fractional movement.
+Desktop gain and acceleration verification remains assigned to T25 and T49 rather than hidden in the isolated engine.
+
+Simultaneous events enter through `Process`. Termination wins over movement and expiry wins over continuation.
+Cleanup acknowledgments must match the pending generation. The runtime must separately validate output-session ownership and release evidence.
+Tests cover all contact-count departures, custom policy, exact deadlines, stationary return, fresh single return, stale timers, and failure recovery.
+Generated sequences and fuzz tests check button-effect balance and finite motion only during held drags.
+Adapters and production desktop observation remain unimplemented by this core milestone.
+
+The latest approved default grace duration is 800 ms. This replaces the 500 ms default used in earlier experiments.
+Existing experiment results retain their original timing. New production and probe tests use 800 ms unless explicitly configured otherwise.
+
 October 13 behavior revision: fresh one-finger return after zero valid contacts releases immediately and restores ordinary input.
 Three-contact return before the 500 ms deadline continues the hold. Single-first staggered return ends the old gesture.
 Ending-tap recognition and its two configuration settings are superseded and removed from the active policy.

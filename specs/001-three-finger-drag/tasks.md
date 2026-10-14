@@ -316,25 +316,32 @@ Revise the plan and task dependencies before production implementation. Failed e
 
 ## 3. Build the isolated gesture logic
 
+Latest approved defaults use 800 ms grace. Earlier 500 ms experiment records remain historical evidence.
+The production core uses fresh one-finger return, superseding the original ending-tap tasks.
+`internal/gesture/engine.go` now provides device-independent transitions and ordered effects.
+Its motion output remains in millimeters. Desktop-equivalent mapping and adapter integration are still outstanding.
+Section 3 verifies isolated recognition and its motion-effect contract. T35's desktop scaling verification belongs to T25 and T49.
+Completing this section does not mark desktop equivalence or output adapters complete.
+
 Each behavior task includes focused deterministic unit tests.
 Use synthetic contacts and an injected clock. Do not use real sleeps or captured user-input fixtures.
 
 | Task | Description | RF coverage | Time | Depends on | Completion criteria | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| T30 | Establish package boundaries and formatting checks. | RF-1 through RF-9 | 25 min | T29 | Made when: The module builds, `make fmt` works, and gesture logic has no platform, configuration, or interface dependencies. | - |
-| T31 | Define contact, state, policy, and effect records. | RF-2 through RF-9 | 25 min | T30 | Made when: Records match the approved model and distinguish gesture termination from pending output release. | - |
-| T32 | Add the synthetic frame and clock test harness. | RF-2 through RF-9 | 25 min | T31 | Made when: A test advances time explicitly and checks ordered effects without hardware, real sleeps, or persisted events. | - |
-| T33 | Implement the approved contact-validity rule. | RF-1, RF-2, RF-5 | 25 min | T32 | Made when: Tests cover accepted fingers, rejected contacts, noise, and approved hardware limitations. | - |
-| T34 | Implement drag-start recognition. | RF-2, RF-4 | 30 min | T33 | Made when: Boundary tests prove three-contact movement starts one hold and stationary or other-count contacts do not. | - |
-| T35 | Implement relative drag movement. | RF-3, RF-4 | 25 min | T34 | Made when: Tests verify initial motion, approved scaling, fractional movement, and no repeated button press. | - |
-| T36 | Implement contact-count pause behavior. | RF-5 | 25 min | T35 | Made when: Tests cover departures to zero, one, two, and additional contacts with no gesture-driven movement. | - |
-| T37 | Implement grace-period timer rules. | RF-5, RF-6, RF-7 | 30 min | T36 | Made when: Tests verify approved duration, stationary returns, repeated changes, and stale-timer rejection. | - |
-| T38 | Implement drag continuation and new baselines. | RF-6 | 25 min | T37 | Made when: Tests prove continuation retains the same hold and excludes repositioning displacement. | - |
-| T39 | Implement ending-tap recognition. | RF-7 | 25 min | T37 | Made when: Tests cover accepted taps and duration, movement, and contact-count rejection boundaries. | - |
-| T40 | Implement release and contact rearming. | RF-2, RF-7, RF-8 | 25 min | T38, T39 | Made when: Tests verify one release, no extra tap click, and approved behavior for contacts remaining after release. | - |
-| T41 | Implement exact-boundary event precedence. | RF-3, RF-5, RF-6, RF-7 | 25 min | T40 | Made when: Tests cover events before, at, and after expiry and apply the approved ordering consistently. | - |
-| T42 | Implement gesture termination after failure. | RF-8, RF-9 | 25 min | T41 | Made when: Tests prove failure cancels motion and timers while preserving only the required cleanup obligation. | - |
-| T43 | Check gesture invariants with synthetic sequences. | RF-2 through RF-9 | 25 min | T42 | Made when: Generated sequences verify balanced button effects, stale-event rejection, and no continuation after failure. | - |
+| T30 | Establish package boundaries and formatting checks. | RF-1 through RF-9 | 25 min | T29 | Made when: The module builds, `make fmt` works, and gesture logic has no platform, configuration, or interface dependencies. Evidence: `internal/README.md`, successful module build and formatting checks, and cgo-disabled core tests. | done |
+| T31 | Define contact, state, policy, and effect records. | RF-2 through RF-9 | 25 min | T30 | Made when: Records match the approved model and distinguish gesture termination from pending output release. Evidence: `model.go` separates recognition and generation-tagged cleanup, with the approved 800 ms default. | done |
+| T32 | Add the synthetic frame and clock test harness. | RF-2 through RF-9 | 25 min | T31 | Made when: A test advances time explicitly and checks ordered effects without hardware, real sleeps, or persisted events. Evidence: `engine_test.go` supplies deterministic frames and verifies hold, timer, release, and restoration ordering. | done |
+| T33 | Implement the approved contact-validity rule. | RF-1, RF-2, RF-5 | 25 min | T32 | Made when: Tests cover accepted fingers, rejected contacts, noise, and approved hardware limitations. Evidence: `contacts_test.go` verifies palm exclusion, thumb representation, invalid-frame rejection, and immediate count transitions. Hardware capability checks remain in the input adapter. | done |
+| T34 | Implement drag-start recognition. | RF-2, RF-4 | 30 min | T33 | Made when: Boundary tests prove three-contact movement starts one hold and stationary or other-count contacts do not. Evidence: `engine_test.go` verifies initial suppression, 1 mm crossing, identity resets, and ordered reset/hold effects. | done |
+| T35 | Implement relative drag movement. | RF-3, RF-4 | 25 min | T34 | Made when: Core tests verify directional millimeter deltas, fractions, motion timestamps, initial-motion discard, and no repeated press. Evidence: `TestMotionContract`, `TestStartAndMotion`. Desktop scaling remains T25/T49. | done |
+| T36 | Implement contact-count pause behavior. | RF-5 | 25 min | T35 | Made when: Tests cover departures to zero, one, two, and additional contacts with no gesture-driven movement. Evidence: `TestEveryContactDeparturePauses`. | done |
+| T37 | Implement grace-period timer rules. | RF-5, RF-6, RF-7 | 30 min | T36 | Made when: Tests verify approved duration, stationary returns, repeated changes, and stale-timer rejection. Evidence: `TestGraceContinuationAndExpiry`, `TestFixedDeadlineAndNewInterruption`. | done |
+| T38 | Implement drag continuation and new baselines. | RF-6 | 25 min | T37 | Made when: Tests prove continuation retains the same hold and excludes repositioning displacement. Evidence: `TestGraceContinuationAndExpiry`, `TestBaselineReplacement`. | done |
+| T39 | Implement fresh one-finger release. | RF-7, RF-8 | 25 min | T37 | Made when: A fresh single contact after zero requests release, with restoration gated on cleanup. Evidence: `TestFreshSingleReturnOrdering`, `TestRemainingFingerAndPalm`. | done |
+| T40 | Implement release and contact rearming. | RF-2, RF-7, RF-8 | 25 min | T38, T39 | Made when: Tests verify one release, no extra press, and remaining-contact blocking. Evidence: `TestPendingCleanupCannotBeBypassed`, `TestPhysicalPressPreventsMovement`, `TestTimerReleaseRearmsWithoutNewEmptyFrame`. | done |
+| T41 | Implement exact-boundary event precedence. | RF-3, RF-5, RF-6, RF-7 | 25 min | T40 | Made when: Event batches prioritize termination and expiry over movement. Evidence: `TestBatchTerminationPrecedence`, `TestBatchExpiryPrecedence`, `TestBatchCancelPreservesPhysicalConsumption`. | done |
+| T42 | Implement gesture termination after failure. | RF-8, RF-9 | 25 min | T41 | Made when: Tests prove failure cancels motion and timers while retaining cleanup. Evidence: `TestFailureAndRepeatedCommands`, `TestFailureCancelsGraceAndRejectsStaleTimer`. | done |
+| T43 | Check gesture invariants with synthetic sequences. | RF-2 through RF-9 | 25 min | T42 | Made when: Generated sequences verify balanced button effects, stale-event rejection, and no continuation after failure. Evidence: `TestSyntheticSequenceButtonInvariant`, `FuzzEngineEffects`, cleanup-generation tests. | done |
 
 ## 4. Build device adapters and runtime coordination
 
